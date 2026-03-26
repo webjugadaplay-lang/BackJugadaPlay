@@ -1,3 +1,4 @@
+// backend/src/models/User.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 const bcrypt = require('bcrypt');
@@ -19,8 +20,9 @@ const User = sequelize.define('User', {
     allowNull: false,
   },
   role: {
-    type: DataTypes.ENUM('bar', 'player'),
+    type: DataTypes.ENUM('bar', 'player', 'admin'),
     allowNull: false,
+    defaultValue: 'player',
   },
   name: {
     type: DataTypes.STRING,
