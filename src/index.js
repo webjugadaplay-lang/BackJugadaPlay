@@ -16,7 +16,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 
 const statsRoutes = require('./routes/statsRoutes');
+const barRoutes = require('./routes/barRoutes');
+
 app.use('/api/stats', statsRoutes);
+app.use('/api/bar', barRoutes);
 
 // Ruta de prueba
 app.get('/api/health', (req, res) => {
@@ -27,6 +30,20 @@ app.get('/api/health', (req, res) => {
 sequelize.sync({ alter: true }) // alter: true actualiza tablas sin borrar datos
   .then(() => {
     console.log('Base de datos conectada');
+
+    // Cargar asociaciones después de que los modelos estén sincronizados
+    const User = require('./models/User');
+    const Room = require('./models/Room');
+    const Prediction = require('./models/Prediction');
+    const Payment = require('./models/Payment');
+    const MatchResult = require('./models/MatchResult');
+
+    // Configurar asociaciones
+    const models = { User, Room, Prediction, Payment, MatchResult };
+    Object.values(models).forEach(model => {
+      if (model.associate) model.associate(models);
+    });
+
     app.listen(PORT, () => {
       console.log(`Servidor corriendo en http://localhost:${PORT}`);
     });
