@@ -52,6 +52,34 @@ const Room = sequelize.define('Room', {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0,
   },
+  api_fixture_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  api_league_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  api_league_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  api_team_home_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  api_team_away_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  api_status: {
+    type: DataTypes.STRING(20),
+    defaultValue: 'NS',
+  },
+  api_last_sync: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
 }, {
   timestamps: true,
   tableName: 'rooms',

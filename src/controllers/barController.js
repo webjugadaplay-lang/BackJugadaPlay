@@ -138,7 +138,7 @@ exports.getBarRooms = async (req, res) => {
   }
 };
 
-// Crear nueva sala
+// Crear nueva sala (actualizado)
 exports.createRoom = async (req, res) => {
   try {
     const barId = req.user.id;
@@ -150,6 +150,11 @@ exports.createRoom = async (req, res) => {
       match_date,
       prediction_close_time,
       entry_fee,
+      api_fixture_id,
+      api_league_id,
+      api_league_name,
+      api_team_home_id,
+      api_team_away_id,
     } = req.body;
     
     // Validaciones
@@ -170,6 +175,14 @@ exports.createRoom = async (req, res) => {
       prediction_close_time: prediction_close_time || new Date(new Date(match_date).getTime() - 15 * 60000),
       entry_fee: entry_fee || 5,
       status: 'active',
+      // Campos de API
+      api_fixture_id,
+      api_league_id,
+      api_league_name,
+      api_team_home_id,
+      api_team_away_id,
+      api_status: 'NS',
+      api_last_sync: new Date(),
     });
     
     res.status(201).json({

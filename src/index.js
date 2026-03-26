@@ -17,9 +17,11 @@ app.use('/api/auth', authRoutes);
 
 const statsRoutes = require('./routes/statsRoutes');
 const barRoutes = require('./routes/barRoutes');
+const apiRoutes = require('./routes/apiRoutes');
 
 app.use('/api/stats', statsRoutes);
 app.use('/api/bar', barRoutes);
+app.use('/api', apiRoutes);
 
 // Ruta de prueba
 app.get('/api/health', (req, res) => {
