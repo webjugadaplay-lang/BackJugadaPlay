@@ -16,31 +16,186 @@ const fetchAPI = async (endpoint, params = {}) => {
     }
   });
   
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status}`);
+  }
+  
   const data = await response.json();
-  if (data.errors?.length) {
-    throw new Error(data.errors[0]);
+  if (data.errors && Object.keys(data.errors).length > 0) {
+    const firstError = Object.values(data.errors)[0];
+    throw new Error(firstError);
   }
   return data;
 };
 
-// Buscar equipos por nombre
-const searchTeams = async (searchTerm) => {
+// ============ FUNCIONES PARA FILTROS ============
+
+// Obtener todos los países (con datos de continente)
+const getCountries = async () => {
   try {
-    // Primero buscar en cache local
+    // Verificar cache primero (países no cambian frecuentemente)
+    const cached = await sequelize.query(
+      `SELECT * FROM countries_cache WHERE last_sync > NOW() - INTERVAL '30 days'`,
+      { type: Sequelize.QueryTypes.SELECT }
+    );
+    
+    if (cached.length > 0) {
+      return cached;
+    }
+    
+    // Obtener de API
+    const data = await fetchAPI('/countries');
+    
+    const countries = data.response.map(item => ({
+      name: item.name,
+      code: item.code,
+      flag: item.flag,
+      continent: item.continent || 'Unknown',
+      last_sync: new Date()
+    }));
+    
+    // Guardar en cache
+    for (const country of countries) {
+      await sequelize.query(
+        `INSERT INTO countries_cache (name, code, flag, continent, last_sync)
+         VALUES (:name, :code, :flag, :continent, :last_sync)
+         ON CONFLICT (code) DO UPDATE SET
+         name = EXCLUDED.name,
+         flag = EXCLUDED.flag,
+         continent = EXCLUDED.continent,
+         last_sync = EXCLUDED.last_sync`,
+        { replacements: country }
+      );
+    }
+    
+    return countries;
+  } catch (error) {
+    console.error('Error en getCountries:', error);
+    throw error;
+  }
+};
+
+// Obtener países por continente
+const getCountriesByContinent = async (continent) => {
+  try {
+    const allCountries = await getCountries();
+    
+    if (continent === 'World') {
+      return allCountries;
+    }
+    
+    return allCountries.filter(c => c.continent === continent);
+  } catch (error) {
+    console.error('Error en getCountriesByContinent:', error);
+    throw error;
+  }
+};
+
+// Obtener ligas por país
+const getLeaguesByCountry = async (countryName) => {
+  try {
+    // Verificar cache (ligas por país, 24 horas de validez)
+    const cached = await sequelize.query(
+      `SELECT * FROM leagues_cache 
+       WHERE country = :countryName 
+       AND last_sync > NOW() - INTERVAL '1 day'`,
+      {
+        replacements: { countryName },
+        type: Sequelize.QueryTypes.SELECT
+      }
+    );
+    
+    if (cached.length > 0) {
+      return cached;
+    }
+    
+    // Obtener de API
+    const data = await fetchAPI('/leagues', { country: countryName });
+    
+    const leagues = data.response.map(item => ({
+      id: item.league.id,
+      name: item.league.name,
+      type: item.league.type,
+      logo: item.league.logo,
+      country: item.country.name,
+      last_sync: new Date()
+    }));
+    
+    // Guardar en cache
+    for (const league of leagues) {
+      await sequelize.query(
+        `INSERT INTO leagues_cache (id, name, type, logo, country, last_sync)
+         VALUES (:id, :name, :type, :logo, :country, :last_sync)
+         ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         type = EXCLUDED.type,
+         logo = EXCLUDED.logo,
+         country = EXCLUDED.country,
+         last_sync = EXCLUDED.last_sync`,
+        { replacements: league }
+      );
+    }
+    
+    return leagues;
+  } catch (error) {
+    console.error('Error en getLeaguesByCountry:', error);
+    throw error;
+  }
+};
+
+// Obtener ligas mundiales (para cuando se selecciona "Mundial")
+const getWorldLeagues = async () => {
+  try {
+    // Buscar ligas internacionales (FIFA World Cup, etc.)
+    const data = await fetchAPI('/leagues', { type: 'Cup' });
+    
+    const worldLeagues = data.response
+      .filter(item => item.country.name === 'World')
+      .map(item => ({
+        id: item.league.id,
+        name: item.league.name,
+        type: item.league.type,
+        logo: item.league.logo,
+        country: item.country.name,
+        last_sync: new Date()
+      }));
+    
+    return worldLeagues;
+  } catch (error) {
+    console.error('Error en getWorldLeagues:', error);
+    throw error;
+  }
+};
+
+// ============ FUNCIONES PARA EQUIPOS ============
+
+// Buscar equipos por nombre (con filtro opcional de liga)
+const searchTeams = async (searchTerm, leagueId = null) => {
+  try {
+    // Buscar en cache local (resultados de búsqueda)
     const cachedTeams = await sequelize.query(
-      `SELECT * FROM teams_cache WHERE name ILIKE :searchTerm LIMIT 10`,
+      `SELECT * FROM teams_cache 
+       WHERE name ILIKE :searchTerm 
+       AND last_sync > NOW() - INTERVAL '7 days'
+       LIMIT 20`,
       {
         replacements: { searchTerm: `%${searchTerm}%` },
         type: Sequelize.QueryTypes.SELECT
       }
     );
 
-    if (cachedTeams.length > 0 && cachedTeams[0].last_sync > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)) {
+    if (cachedTeams.length > 0) {
       return cachedTeams;
     }
 
-    // Buscar en API con fetch
-    const data = await fetchAPI('/teams', { search: searchTerm });
+    // Buscar en API
+    const params = { search: searchTerm };
+    if (leagueId) {
+      params.league = leagueId;
+      params.season = new Date().getFullYear();
+    }
+    
+    const data = await fetchAPI('/teams', params);
 
     const teams = data.response.map(item => ({
       api_team_id: item.team.id,
@@ -73,10 +228,35 @@ const searchTeams = async (searchTerm) => {
   }
 };
 
+// Buscar equipos por liga (para mostrar equipos de un campeonato)
+const getTeamsByLeague = async (leagueId, season = null) => {
+  try {
+    const currentSeason = season || new Date().getFullYear();
+    
+    const data = await fetchAPI('/teams', { 
+      league: leagueId, 
+      season: currentSeason 
+    });
+
+    return data.response.map(item => ({
+      api_team_id: item.team.id,
+      name: item.team.name,
+      code: item.team.code,
+      logo_url: item.team.logo,
+      country: item.team.country
+    }));
+  } catch (error) {
+    console.error('Error en getTeamsByLeague:', error);
+    throw error;
+  }
+};
+
+// ============ FUNCIONES PARA PARTIDOS ============
+
 // Buscar próximos partidos de un equipo
 const getTeamFixtures = async (teamId, next = 10) => {
   try {
-    // Buscar en cache primero
+    // Buscar en cache primero (fixtures de las próximas 24h)
     const cachedFixtures = await sequelize.query(
       `SELECT * FROM fixtures_cache 
        WHERE (team_home_id = :teamId OR team_away_id = :teamId)
@@ -154,7 +334,9 @@ const getFixtureById = async (fixtureId) => {
       team_away_id: item.teams.away.id,
       team_away_name: item.teams.away.name,
       match_date: item.fixture.date,
-      status: item.fixture.status.short
+      status: item.fixture.status.short,
+      venue: item.fixture.venue?.name,
+      city: item.fixture.venue?.city
     };
   } catch (error) {
     console.error('Error en getFixtureById:', error);
@@ -162,7 +344,7 @@ const getFixtureById = async (fixtureId) => {
   }
 };
 
-// Obtener goles de un partido
+// Obtener goles de un partido (solo goles)
 const getFixtureGoals = async (fixtureId) => {
   try {
     const data = await fetchAPI('/fixtures/events', {
@@ -182,28 +364,37 @@ const getFixtureGoals = async (fixtureId) => {
   }
 };
 
-// Buscar ligas por país
-const getLeaguesByCountry = async (country) => {
+// Obtener estadísticas de un partido (para mostrar en vivo)
+const getFixtureStatistics = async (fixtureId) => {
   try {
-    const data = await fetchAPI('/leagues', { country });
+    const data = await fetchAPI('/fixtures/statistics', { fixture: fixtureId });
 
     return data.response.map(item => ({
-      id: item.league.id,
-      name: item.league.name,
-      type: item.league.type,
-      logo: item.league.logo,
-      country: item.country.name
+      team: item.team.name,
+      statistics: item.statistics
     }));
   } catch (error) {
-    console.error('Error en getLeaguesByCountry:', error);
+    console.error('Error en getFixtureStatistics:', error);
     throw error;
   }
 };
 
+// ============ EXPORTACIÓN ============
+
 module.exports = {
+  // Funciones para filtros
+  getCountries,
+  getCountriesByContinent,
+  getLeaguesByCountry,
+  getWorldLeagues,
+  
+  // Funciones para equipos
   searchTeams,
+  getTeamsByLeague,
+  
+  // Funciones para partidos
   getTeamFixtures,
   getFixtureById,
   getFixtureGoals,
-  getLeaguesByCountry
+  getFixtureStatistics
 };
