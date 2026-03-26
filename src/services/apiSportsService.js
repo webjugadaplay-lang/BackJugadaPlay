@@ -1,14 +1,26 @@
-const axios = require('axios');
 const { Sequelize } = require('sequelize');
 const sequelize = require('../config/database');
 
 const API_BASE_URL = 'https://v3.football.api-sports.io';
 const API_KEY = process.env.API_SPORTS_KEY;
 
-// Headers para todas las peticiones
-const headers = {
-  'x-rapidapi-key': API_KEY,
-  'x-rapidapi-host': 'v3.football.api-sports.io'
+// Helper para peticiones fetch
+const fetchAPI = async (endpoint, params = {}) => {
+  const url = new URL(`${API_BASE_URL}${endpoint}`);
+  Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+  
+  const response = await fetch(url.toString(), {
+    headers: {
+      'x-rapidapi-key': API_KEY,
+      'x-rapidapi-host': 'v3.football.api-sports.io'
+    }
+  });
+  
+  const data = await response.json();
+  if (data.errors?.length) {
+    throw new Error(data.errors[0]);
+  }
+  return data;
 };
 
 // Buscar equipos por nombre
@@ -27,17 +39,10 @@ const searchTeams = async (searchTerm) => {
       return cachedTeams;
     }
 
-    // Buscar en API
-    const response = await axios.get(`${API_BASE_URL}/teams`, {
-      headers,
-      params: { search: searchTerm }
-    });
+    // Buscar en API con fetch
+    const data = await fetchAPI('/teams', { search: searchTerm });
 
-    if (response.data.errors?.length) {
-      throw new Error(response.data.errors[0]);
-    }
-
-    const teams = response.data.response.map(item => ({
+    const teams = data.response.map(item => ({
       api_team_id: item.team.id,
       name: item.team.name,
       code: item.team.code,
@@ -71,7 +76,7 @@ const searchTeams = async (searchTerm) => {
 // Buscar próximos partidos de un equipo
 const getTeamFixtures = async (teamId, next = 10) => {
   try {
-    // Buscar en cache primero (fixtures de las próximas 24h)
+    // Buscar en cache primero
     const cachedFixtures = await sequelize.query(
       `SELECT * FROM fixtures_cache 
        WHERE (team_home_id = :teamId OR team_away_id = :teamId)
@@ -89,20 +94,13 @@ const getTeamFixtures = async (teamId, next = 10) => {
     }
 
     // Buscar en API
-    const response = await axios.get(`${API_BASE_URL}/fixtures`, {
-      headers,
-      params: {
-        team: teamId,
-        next,
-        season: new Date().getFullYear()
-      }
+    const data = await fetchAPI('/fixtures', {
+      team: teamId,
+      next,
+      season: new Date().getFullYear()
     });
 
-    if (response.data.errors?.length) {
-      throw new Error(response.data.errors[0]);
-    }
-
-    const fixtures = response.data.response.map(item => ({
+    const fixtures = data.response.map(item => ({
       api_fixture_id: item.fixture.id,
       api_league_id: item.league.id,
       league_name: item.league.name,
@@ -141,16 +139,9 @@ const getTeamFixtures = async (teamId, next = 10) => {
 // Obtener detalles de un fixture específico
 const getFixtureById = async (fixtureId) => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/fixtures`, {
-      headers,
-      params: { id: fixtureId }
-    });
+    const data = await fetchAPI('/fixtures', { id: fixtureId });
 
-    if (response.data.errors?.length) {
-      throw new Error(response.data.errors[0]);
-    }
-
-    const item = response.data.response[0];
+    const item = data.response[0];
     if (!item) return null;
 
     return {
@@ -174,19 +165,12 @@ const getFixtureById = async (fixtureId) => {
 // Obtener goles de un partido
 const getFixtureGoals = async (fixtureId) => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/fixtures/events`, {
-      headers,
-      params: {
-        fixture: fixtureId,
-        type: 'Goal'
-      }
+    const data = await fetchAPI('/fixtures/events', {
+      fixture: fixtureId,
+      type: 'Goal'
     });
 
-    if (response.data.errors?.length) {
-      throw new Error(response.data.errors[0]);
-    }
-
-    return response.data.response.map(event => ({
+    return data.response.map(event => ({
       minute: event.time.elapsed,
       team: event.team.name,
       player: event.player.name,
@@ -198,19 +182,12 @@ const getFixtureGoals = async (fixtureId) => {
   }
 };
 
-// Buscar ligas por país (opcional)
+// Buscar ligas por país
 const getLeaguesByCountry = async (country) => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/leagues`, {
-      headers,
-      params: { country }
-    });
+    const data = await fetchAPI('/leagues', { country });
 
-    if (response.data.errors?.length) {
-      throw new Error(response.data.errors[0]);
-    }
-
-    return response.data.response.map(item => ({
+    return data.response.map(item => ({
       id: item.league.id,
       name: item.league.name,
       type: item.league.type,
