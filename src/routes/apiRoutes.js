@@ -32,7 +32,7 @@ router.get('/countries', async (req, res) => {
     const { continentId } = req.query;
     const where = {};
     if (continentId) where.continent_id = continentId;
-    
+
     const countries = await Country.findAll({
       where,
       include: [{ model: Continent, as: 'continent' }],
@@ -51,7 +51,7 @@ router.get('/tournaments', async (req, res) => {
     const { countryId } = req.query;
     const where = {};
     if (countryId) where.country_id = countryId;
-    
+
     const tournaments = await Tournament.findAll({
       where,
       include: [{ model: Country, as: 'country' }],
@@ -61,6 +61,27 @@ router.get('/tournaments', async (req, res) => {
   } catch (error) {
     console.error('Error en /tournaments:', error);
     res.status(500).json({ success: false, message: 'Error al obtener torneos' });
+  }
+});
+
+// Obtener torneos por continente (torneos internacionales)
+router.get('/tournaments/by-continent', async (req, res) => {
+  try {
+    const { continentId } = req.query;
+
+    // Buscar torneos que no tienen país asociado (internacionales)
+    // y que corresponden al continente
+    const tournaments = await Tournament.findAll({
+      where: {
+        country_id: null,
+      },
+      order: [['name', 'ASC']],
+    });
+
+    res.json({ success: true, data: tournaments });
+  } catch (error) {
+    console.error('Error en /tournaments/by-continent:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener torneos del continente' });
   }
 });
 
