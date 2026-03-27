@@ -28,44 +28,84 @@ const fetchAPI = async (endpoint, params = {}) => {
   return data;
 };
 
+// Función para verificar si una tabla existe
+const tableExists = async (tableName) => {
+  try {
+    const result = await sequelize.query(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = :tableName
+      )`,
+      {
+        replacements: { tableName },
+        type: Sequelize.QueryTypes.SELECT
+      }
+    );
+    return result[0].exists;
+  } catch (error) {
+    console.error(`Error checking table ${tableName}:`, error);
+    return false;
+  }
+};
+
 // ============ FUNCIONES PARA FILTROS ============
 
 // Obtener todos los países (con datos de continente)
 const getCountries = async () => {
   try {
-    // Verificar cache primero (países no cambian frecuentemente)
-    const cached = await sequelize.query(
-      `SELECT * FROM countries_cache WHERE last_sync > NOW() - INTERVAL '30 days'`,
-      { type: Sequelize.QueryTypes.SELECT }
-    );
+    // Verificar si la tabla existe
+    const hasCountriesCache = await tableExists('countries_cache');
     
-    if (cached.length > 0) {
-      return cached;
+    if (hasCountriesCache) {
+      // Verificar cache primero
+      const cached = await sequelize.query(
+        `SELECT * FROM countries_cache WHERE last_sync > NOW() - INTERVAL '30 days'`,
+        { type: Sequelize.QueryTypes.SELECT }
+      );
+      
+      if (cached.length > 0) {
+        return cached;
+      }
     }
     
-    // Obtener de API
-    const data = await fetchAPI('/countries');
+    // Obtener de API (no podemos obtener países directamente, así que usamos ligas)
+    const data = await fetchAPI('/leagues');
     
-    const countries = data.response.map(item => ({
-      name: item.name,
-      code: item.code,
-      flag: item.flag,
-      continent: item.continent || 'Unknown',
-      last_sync: new Date()
-    }));
+    // Extraer países únicos de las ligas
+    const countriesMap = new Map();
+    for (const item of data.response) {
+      const country = item.country;
+      if (!countriesMap.has(country.code)) {
+        countriesMap.set(country.code, {
+          code: country.code,
+          name: country.name,
+          flag: country.flag,
+          continent: country.continent || 'Unknown',
+          last_sync: new Date()
+        });
+      }
+    }
     
-    // Guardar en cache
-    for (const country of countries) {
-      await sequelize.query(
-        `INSERT INTO countries_cache (name, code, flag, continent, last_sync)
-         VALUES (:name, :code, :flag, :continent, :last_sync)
-         ON CONFLICT (code) DO UPDATE SET
-         name = EXCLUDED.name,
-         flag = EXCLUDED.flag,
-         continent = EXCLUDED.continent,
-         last_sync = EXCLUDED.last_sync`,
-        { replacements: country }
-      );
+    const countries = Array.from(countriesMap.values());
+    
+    // Guardar en cache si la tabla existe
+    if (hasCountriesCache) {
+      for (const country of countries) {
+        try {
+          await sequelize.query(
+            `INSERT INTO countries_cache (code, name, flag, continent, last_sync)
+             VALUES (:code, :name, :flag, :continent, :last_sync)
+             ON CONFLICT (code) DO UPDATE SET
+             name = EXCLUDED.name,
+             flag = EXCLUDED.flag,
+             continent = EXCLUDED.continent,
+             last_sync = EXCLUDED.last_sync`,
+            { replacements: country }
+          );
+        } catch (err) {
+          console.error('Error guardando país en cache:', err);
+        }
+      }
     }
     
     return countries;
@@ -94,19 +134,23 @@ const getCountriesByContinent = async (continent) => {
 // Obtener ligas por país
 const getLeaguesByCountry = async (countryName) => {
   try {
-    // Verificar cache (ligas por país, 24 horas de validez)
-    const cached = await sequelize.query(
-      `SELECT * FROM leagues_cache 
-       WHERE country = :countryName 
-       AND last_sync > NOW() - INTERVAL '1 day'`,
-      {
-        replacements: { countryName },
-        type: Sequelize.QueryTypes.SELECT
-      }
-    );
+    const hasLeaguesCache = await tableExists('leagues_cache');
     
-    if (cached.length > 0) {
-      return cached;
+    if (hasLeaguesCache) {
+      // Verificar cache
+      const cached = await sequelize.query(
+        `SELECT * FROM leagues_cache 
+         WHERE country = :countryName 
+         AND last_sync > NOW() - INTERVAL '1 day'`,
+        {
+          replacements: { countryName },
+          type: Sequelize.QueryTypes.SELECT
+        }
+      );
+      
+      if (cached.length > 0) {
+        return cached;
+      }
     }
     
     // Obtener de API
@@ -121,19 +165,25 @@ const getLeaguesByCountry = async (countryName) => {
       last_sync: new Date()
     }));
     
-    // Guardar en cache
-    for (const league of leagues) {
-      await sequelize.query(
-        `INSERT INTO leagues_cache (id, name, type, logo, country, last_sync)
-         VALUES (:id, :name, :type, :logo, :country, :last_sync)
-         ON CONFLICT (id) DO UPDATE SET
-         name = EXCLUDED.name,
-         type = EXCLUDED.type,
-         logo = EXCLUDED.logo,
-         country = EXCLUDED.country,
-         last_sync = EXCLUDED.last_sync`,
-        { replacements: league }
-      );
+    // Guardar en cache si la tabla existe
+    if (hasLeaguesCache) {
+      for (const league of leagues) {
+        try {
+          await sequelize.query(
+            `INSERT INTO leagues_cache (id, name, type, logo, country, last_sync)
+             VALUES (:id, :name, :type, :logo, :country, :last_sync)
+             ON CONFLICT (id) DO UPDATE SET
+             name = EXCLUDED.name,
+             type = EXCLUDED.type,
+             logo = EXCLUDED.logo,
+             country = EXCLUDED.country,
+             last_sync = EXCLUDED.last_sync`,
+            { replacements: league }
+          );
+        } catch (err) {
+          console.error('Error guardando liga en cache:', err);
+        }
+      }
     }
     
     return leagues;
@@ -143,10 +193,9 @@ const getLeaguesByCountry = async (countryName) => {
   }
 };
 
-// Obtener ligas mundiales (para cuando se selecciona "Mundial")
+// Obtener ligas mundiales
 const getWorldLeagues = async () => {
   try {
-    // Buscar ligas internacionales (FIFA World Cup, etc.)
     const data = await fetchAPI('/leagues', { type: 'Cup' });
     
     const worldLeagues = data.response
@@ -172,22 +221,6 @@ const getWorldLeagues = async () => {
 // Buscar equipos por nombre (con filtro opcional de liga)
 const searchTeams = async (searchTerm, leagueId = null) => {
   try {
-    // Buscar en cache local (resultados de búsqueda)
-    const cachedTeams = await sequelize.query(
-      `SELECT * FROM teams_cache 
-       WHERE name ILIKE :searchTerm 
-       AND last_sync > NOW() - INTERVAL '7 days'
-       LIMIT 20`,
-      {
-        replacements: { searchTerm: `%${searchTerm}%` },
-        type: Sequelize.QueryTypes.SELECT
-      }
-    );
-
-    if (cachedTeams.length > 0) {
-      return cachedTeams;
-    }
-
     // Buscar en API
     const params = { search: searchTerm };
     if (leagueId) {
@@ -202,24 +235,8 @@ const searchTeams = async (searchTerm, leagueId = null) => {
       name: item.team.name,
       code: item.team.code,
       logo_url: item.team.logo,
-      country: item.team.country,
-      last_sync: new Date()
+      country: item.team.country
     }));
-
-    // Guardar en cache
-    for (const team of teams) {
-      await sequelize.query(
-        `INSERT INTO teams_cache (api_team_id, name, code, logo_url, country, last_sync)
-         VALUES (:api_team_id, :name, :code, :logo_url, :country, :last_sync)
-         ON CONFLICT (api_team_id) DO UPDATE SET
-         name = EXCLUDED.name,
-         code = EXCLUDED.code,
-         logo_url = EXCLUDED.logo_url,
-         country = EXCLUDED.country,
-         last_sync = EXCLUDED.last_sync`,
-        { replacements: team }
-      );
-    }
 
     return teams;
   } catch (error) {
@@ -228,7 +245,7 @@ const searchTeams = async (searchTerm, leagueId = null) => {
   }
 };
 
-// Buscar equipos por liga (para mostrar equipos de un campeonato)
+// Obtener equipos por liga
 const getTeamsByLeague = async (leagueId, season = null) => {
   try {
     const currentSeason = season || new Date().getFullYear();
@@ -256,23 +273,6 @@ const getTeamsByLeague = async (leagueId, season = null) => {
 // Buscar próximos partidos de un equipo
 const getTeamFixtures = async (teamId, next = 10) => {
   try {
-    // Buscar en cache primero (fixtures de las próximas 24h)
-    const cachedFixtures = await sequelize.query(
-      `SELECT * FROM fixtures_cache 
-       WHERE (team_home_id = :teamId OR team_away_id = :teamId)
-       AND match_date > NOW()
-       ORDER BY match_date ASC 
-       LIMIT :next`,
-      {
-        replacements: { teamId, next },
-        type: Sequelize.QueryTypes.SELECT
-      }
-    );
-
-    if (cachedFixtures.length > 0 && cachedFixtures[0].last_sync > new Date(Date.now() - 6 * 60 * 60 * 1000)) {
-      return cachedFixtures;
-    }
-
     // Buscar en API
     const data = await fetchAPI('/fixtures', {
       team: teamId,
@@ -290,24 +290,8 @@ const getTeamFixtures = async (teamId, next = 10) => {
       team_away_id: item.teams.away.id,
       team_away_name: item.teams.away.name,
       match_date: item.fixture.date,
-      status: item.fixture.status.short,
-      last_sync: new Date()
+      status: item.fixture.status.short
     }));
-
-    // Guardar en cache
-    for (const fixture of fixtures) {
-      await sequelize.query(
-        `INSERT INTO fixtures_cache (api_fixture_id, api_league_id, league_name, season,
-          team_home_id, team_home_name, team_away_id, team_away_name, match_date, status, last_sync)
-         VALUES (:api_fixture_id, :api_league_id, :league_name, :season,
-          :team_home_id, :team_home_name, :team_away_id, :team_away_name, :match_date, :status, :last_sync)
-         ON CONFLICT (api_fixture_id) DO UPDATE SET
-          match_date = EXCLUDED.match_date,
-          status = EXCLUDED.status,
-          last_sync = EXCLUDED.last_sync`,
-        { replacements: fixture }
-      );
-    }
 
     return fixtures;
   } catch (error) {
@@ -344,7 +328,7 @@ const getFixtureById = async (fixtureId) => {
   }
 };
 
-// Obtener goles de un partido (solo goles)
+// Obtener goles de un partido
 const getFixtureGoals = async (fixtureId) => {
   try {
     const data = await fetchAPI('/fixtures/events', {
@@ -364,7 +348,7 @@ const getFixtureGoals = async (fixtureId) => {
   }
 };
 
-// Obtener estadísticas de un partido (para mostrar en vivo)
+// Obtener estadísticas de un partido
 const getFixtureStatistics = async (fixtureId) => {
   try {
     const data = await fetchAPI('/fixtures/statistics', { fixture: fixtureId });
