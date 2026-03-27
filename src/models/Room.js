@@ -10,10 +10,6 @@ const Room = sequelize.define('Room', {
   bar_id: {
     type: DataTypes.UUID,
     allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id',
-    },
   },
   name: {
     type: DataTypes.STRING,
@@ -22,6 +18,11 @@ const Room = sequelize.define('Room', {
   sport: {
     type: DataTypes.STRING,
     allowNull: false,
+    defaultValue: 'Fútbol',
+  },
+  tournament: {
+    type: DataTypes.STRING,
+    allowNull: true,
   },
   team_home: {
     type: DataTypes.STRING,
@@ -41,7 +42,6 @@ const Room = sequelize.define('Room', {
   },
   entry_fee: {
     type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
     defaultValue: 5.00,
   },
   status: {
@@ -52,6 +52,7 @@ const Room = sequelize.define('Room', {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0,
   },
+  // Campos opcionales de API (los dejamos por si luego se usan)
   api_fixture_id: {
     type: DataTypes.INTEGER,
     allowNull: true,
@@ -85,10 +86,10 @@ const Room = sequelize.define('Room', {
   tableName: 'rooms',
 });
 
+// Asociaciones
 Room.associate = (models) => {
-  Room.belongsTo(models.User, { foreignKey: 'bar_id' });
-  Room.hasMany(models.Prediction, { foreignKey: 'room_id' });
-  Room.hasOne(models.MatchResult, { foreignKey: 'room_id' });
+  Room.belongsTo(models.User, { foreignKey: 'bar_id', as: 'bar' });
+  Room.hasMany(models.Prediction, { foreignKey: 'room_id', as: 'predictions' });
 };
 
 module.exports = Room;
