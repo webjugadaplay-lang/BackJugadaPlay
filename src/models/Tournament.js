@@ -23,10 +23,11 @@ const Tournament = sequelize.define('Tournament', {
     type: DataTypes.STRING(50),
     defaultValue: 'League',
   },
-  // Logo eliminado
 }, {
   timestamps: true,
   tableName: 'tournaments',
+  createdAt: 'created_at',
+  updatedAt: false,
 });
 
 Tournament.associate = (models) => {

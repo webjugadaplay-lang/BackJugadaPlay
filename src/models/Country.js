@@ -31,6 +31,8 @@ const Country = sequelize.define('Country', {
 }, {
   timestamps: true,
   tableName: 'countries',
+  createdAt: 'created_at',
+  updatedAt: false,
 });
 
 Country.associate = (models) => {
