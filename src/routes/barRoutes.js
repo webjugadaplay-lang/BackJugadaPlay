@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const barController = require('../controllers/barController');
 const authMiddleware = require('../middleware/authMiddleware');
+const barController = require('../controllers/barController');
 
 // Todas las rutas requieren autenticación
 router.use(authMiddleware);
