@@ -53,21 +53,6 @@ const tableExists = async (tableName) => {
 // Obtener todos los países (con datos de continente)
 const getCountries = async () => {
   try {
-    // Verificar si la tabla existe
-    const hasCountriesCache = await tableExists('countries_cache');
-    
-    if (hasCountriesCache) {
-      // Verificar cache primero
-      const cached = await sequelize.query(
-        `SELECT * FROM countries_cache WHERE last_sync > NOW() - INTERVAL '30 days'`,
-        { type: Sequelize.QueryTypes.SELECT }
-      );
-      
-      if (cached.length > 0) {
-        return cached;
-      }
-    }
-    
     // Obtener de API (no podemos obtener países directamente, así que usamos ligas)
     const data = await fetchAPI('/leagues');
     
@@ -88,7 +73,8 @@ const getCountries = async () => {
     
     const countries = Array.from(countriesMap.values());
     
-    // Guardar en cache si la tabla existe
+    // Intentar guardar en cache si la tabla existe
+    const hasCountriesCache = await tableExists('countries_cache');
     if (hasCountriesCache) {
       for (const country of countries) {
         try {
@@ -103,7 +89,8 @@ const getCountries = async () => {
             { replacements: country }
           );
         } catch (err) {
-          console.error('Error guardando país en cache:', err);
+          // Solo loguear error, no detener el proceso
+          console.error('Error guardando país en cache:', err.message);
         }
       }
     }
@@ -134,25 +121,6 @@ const getCountriesByContinent = async (continent) => {
 // Obtener ligas por país
 const getLeaguesByCountry = async (countryName) => {
   try {
-    const hasLeaguesCache = await tableExists('leagues_cache');
-    
-    if (hasLeaguesCache) {
-      // Verificar cache
-      const cached = await sequelize.query(
-        `SELECT * FROM leagues_cache 
-         WHERE country = :countryName 
-         AND last_sync > NOW() - INTERVAL '1 day'`,
-        {
-          replacements: { countryName },
-          type: Sequelize.QueryTypes.SELECT
-        }
-      );
-      
-      if (cached.length > 0) {
-        return cached;
-      }
-    }
-    
     // Obtener de API
     const data = await fetchAPI('/leagues', { country: countryName });
     
@@ -165,7 +133,8 @@ const getLeaguesByCountry = async (countryName) => {
       last_sync: new Date()
     }));
     
-    // Guardar en cache si la tabla existe
+    // Intentar guardar en cache si la tabla existe
+    const hasLeaguesCache = await tableExists('leagues_cache');
     if (hasLeaguesCache) {
       for (const league of leagues) {
         try {
@@ -181,7 +150,7 @@ const getLeaguesByCountry = async (countryName) => {
             { replacements: league }
           );
         } catch (err) {
-          console.error('Error guardando liga en cache:', err);
+          console.error('Error guardando liga en cache:', err.message);
         }
       }
     }
