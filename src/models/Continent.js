@@ -18,10 +18,8 @@ const Continent = sequelize.define('Continent', {
     unique: true,
   },
 }, {
-  timestamps: true,
+  timestamps: false,
   tableName: 'continents',
-  createdAt: 'created_at',
-  updatedAt: false, // Desactivar updatedAt
 });
 
 Continent.associate = (models) => {

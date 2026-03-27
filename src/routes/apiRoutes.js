@@ -3,7 +3,7 @@ const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const apiSportsService = require('../services/apiSportsService');
 
-// Importar modelos para torneos
+// Importar modelos
 const Continent = require('../models/Continent');
 const Country = require('../models/Country');
 const Tournament = require('../models/Tournament');
@@ -31,8 +31,8 @@ router.get('/countries', async (req, res) => {
   try {
     const { continentId } = req.query;
     const where = {};
-    if (continentId) where.continent_id = continentId;
-
+    if (continentId) where.continent_id = parseInt(continentId);
+    
     const countries = await Country.findAll({
       where,
       include: [{ model: Continent, as: 'continent' }],
@@ -50,8 +50,8 @@ router.get('/tournaments', async (req, res) => {
   try {
     const { countryId } = req.query;
     const where = {};
-    if (countryId) where.country_id = countryId;
-
+    if (countryId) where.country_id = parseInt(countryId);
+    
     const tournaments = await Tournament.findAll({
       where,
       include: [{ model: Country, as: 'country' }],
@@ -68,16 +68,45 @@ router.get('/tournaments', async (req, res) => {
 router.get('/tournaments/by-continent', async (req, res) => {
   try {
     const { continentId } = req.query;
-
-    // Buscar torneos que no tienen país asociado (internacionales)
-    // y que corresponden al continente
-    const tournaments = await Tournament.findAll({
-      where: {
-        country_id: null,
-      },
-      order: [['name', 'ASC']],
-    });
-
+    
+    let tournaments = [];
+    
+    // Mapeo de torneos por continente basado en el nombre del continente
+    const continentName = await Continent.findByPk(continentId);
+    
+    if (continentName) {
+      if (continentName.name === 'Sudamérica') {
+        tournaments = await Tournament.findAll({
+          where: {
+            name: ['Copa Libertadores', 'Copa Sudamericana', 'Copa América', 'Recopa Sudamericana'],
+            country_id: null,
+          },
+          order: [['name', 'ASC']],
+        });
+      } else if (continentName.name === 'Europa') {
+        tournaments = await Tournament.findAll({
+          where: {
+            name: ['UEFA Champions League', 'UEFA Europa League', 'UEFA Europa Conference League', 'Eurocopa', 'Supercopa Europea'],
+            country_id: null,
+          },
+          order: [['name', 'ASC']],
+        });
+      } else if (continentName.name === 'Mundial') {
+        tournaments = await Tournament.findAll({
+          where: {
+            name: ['Copa Mundial FIFA'],
+            country_id: null,
+          },
+          order: [['name', 'ASC']],
+        });
+      } else {
+        tournaments = await Tournament.findAll({
+          where: { country_id: null },
+          order: [['name', 'ASC']],
+        });
+      }
+    }
+    
     res.json({ success: true, data: tournaments });
   } catch (error) {
     console.error('Error en /tournaments/by-continent:', error);
@@ -87,7 +116,7 @@ router.get('/tournaments/by-continent', async (req, res) => {
 
 // ============ RUTAS PARA API-SPORTS (OPCIONALES) ============
 
-// Buscar equipos por nombre (con filtro opcional de liga)
+// Buscar equipos por nombre
 router.get('/search-teams', async (req, res) => {
   try {
     const { q, league } = req.query;
@@ -99,20 +128,13 @@ router.get('/search-teams', async (req, res) => {
     }
 
     const teams = await apiSportsService.searchTeams(q, league);
-    res.json({
-      success: true,
-      data: teams
-    });
+    res.json({ success: true, data: teams });
   } catch (error) {
     console.error('Error en /search-teams:', error);
-    // Si la API está suspendida, devolvemos un array vacío
-    if (error.message.includes('suspended')) {
+    if (error.message && error.message.includes('suspended')) {
       res.json({ success: true, data: [], message: 'API temporalmente no disponible' });
     } else {
-      res.status(500).json({
-        success: false,
-        message: 'Error al buscar equipos'
-      });
+      res.status(500).json({ success: false, message: 'Error al buscar equipos' });
     }
   }
 });
@@ -129,19 +151,13 @@ router.get('/team-fixtures', async (req, res) => {
     }
 
     const fixtures = await apiSportsService.getTeamFixtures(parseInt(teamId), parseInt(next));
-    res.json({
-      success: true,
-      data: fixtures
-    });
+    res.json({ success: true, data: fixtures });
   } catch (error) {
     console.error('Error en /team-fixtures:', error);
-    if (error.message.includes('suspended')) {
+    if (error.message && error.message.includes('suspended')) {
       res.json({ success: true, data: [], message: 'API temporalmente no disponible' });
     } else {
-      res.status(500).json({
-        success: false,
-        message: 'Error al buscar partidos'
-      });
+      res.status(500).json({ success: false, message: 'Error al buscar partidos' });
     }
   }
 });
@@ -156,19 +172,13 @@ router.get('/fixture/:id', async (req, res) => {
         message: 'Partido no encontrado'
       });
     }
-    res.json({
-      success: true,
-      data: fixture
-    });
+    res.json({ success: true, data: fixture });
   } catch (error) {
     console.error('Error en /fixture/:id:', error);
-    if (error.message.includes('suspended')) {
+    if (error.message && error.message.includes('suspended')) {
       res.json({ success: true, data: null, message: 'API temporalmente no disponible' });
     } else {
-      res.status(500).json({
-        success: false,
-        message: 'Error al obtener detalles del partido'
-      });
+      res.status(500).json({ success: false, message: 'Error al obtener detalles del partido' });
     }
   }
 });
@@ -177,19 +187,13 @@ router.get('/fixture/:id', async (req, res) => {
 router.get('/fixture/:id/goals', async (req, res) => {
   try {
     const goals = await apiSportsService.getFixtureGoals(req.params.id);
-    res.json({
-      success: true,
-      data: goals
-    });
+    res.json({ success: true, data: goals });
   } catch (error) {
     console.error('Error en /fixture/:id/goals:', error);
-    if (error.message.includes('suspended')) {
+    if (error.message && error.message.includes('suspended')) {
       res.json({ success: true, data: [], message: 'API temporalmente no disponible' });
     } else {
-      res.status(500).json({
-        success: false,
-        message: 'Error al obtener goles del partido'
-      });
+      res.status(500).json({ success: false, message: 'Error al obtener goles del partido' });
     }
   }
 });
@@ -198,19 +202,13 @@ router.get('/fixture/:id/goals', async (req, res) => {
 router.get('/fixture/:id/statistics', async (req, res) => {
   try {
     const statistics = await apiSportsService.getFixtureStatistics(req.params.id);
-    res.json({
-      success: true,
-      data: statistics
-    });
+    res.json({ success: true, data: statistics });
   } catch (error) {
     console.error('Error en /fixture/:id/statistics:', error);
-    if (error.message.includes('suspended')) {
+    if (error.message && error.message.includes('suspended')) {
       res.json({ success: true, data: [], message: 'API temporalmente no disponible' });
     } else {
-      res.status(500).json({
-        success: false,
-        message: 'Error al obtener estadísticas del partido'
-      });
+      res.status(500).json({ success: false, message: 'Error al obtener estadísticas del partido' });
     }
   }
 });

@@ -24,10 +24,8 @@ const Tournament = sequelize.define('Tournament', {
     defaultValue: 'League',
   },
 }, {
-  timestamps: true,
+  timestamps: false,
   tableName: 'tournaments',
-  createdAt: 'created_at',
-  updatedAt: false,
 });
 
 Tournament.associate = (models) => {
