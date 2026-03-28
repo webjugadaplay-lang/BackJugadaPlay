@@ -33,7 +33,7 @@ router.get('/countries', async (req, res) => {
     const { continentId } = req.query;
     const where = {};
     if (continentId) where.continent_id = parseInt(continentId);
-    
+
     const countries = await Country.findAll({
       where,
       order: [['name', 'ASC']],
@@ -51,7 +51,7 @@ router.get('/tournaments', async (req, res) => {
     const { countryId } = req.query;
     const where = {};
     if (countryId) where.country_id = parseInt(countryId);
-    
+
     const tournaments = await Tournament.findAll({
       where,
       include: [{ model: Country, as: 'country' }],
@@ -68,12 +68,12 @@ router.get('/tournaments', async (req, res) => {
 router.get('/tournaments/by-continent', async (req, res) => {
   try {
     const { continentId } = req.query;
-    
+
     let tournaments = [];
-    
+
     // Mapeo de torneos por continente basado en el nombre del continente
     const continentName = await Continent.findByPk(continentId);
-    
+
     if (continentName) {
       if (continentName.name === 'Sudamérica') {
         tournaments = await Tournament.findAll({
@@ -106,7 +106,7 @@ router.get('/tournaments/by-continent', async (req, res) => {
         });
       }
     }
-    
+
     res.json({ success: true, data: tournaments });
   } catch (error) {
     console.error('Error en /tournaments/by-continent:', error);
@@ -166,6 +166,51 @@ router.get('/search-teams', async (req, res) => {
     } else {
       res.status(500).json({ success: false, message: 'Error al buscar equipos' });
     }
+  }
+});
+
+// Obtener equipos internacionales (selecciones nacionales)
+router.get('/teams/international', async (req, res) => {
+  try {
+    const teams = await Team.findAll({
+      where: {
+        country_id: null,  // Equipos sin país asociado (selecciones)
+      },
+      attributes: ['id', 'name'],
+      order: [['name', 'ASC']],
+    });
+    res.json({
+      success: true,
+      data: teams
+    });
+  } catch (error) {
+    console.error('Error en /teams/international:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener equipos internacionales'
+    });
+  }
+});
+
+// Obtener torneos internacionales
+router.get('/tournaments/international', async (req, res) => {
+  try {
+    const tournaments = await Tournament.findAll({
+      where: {
+        country_id: null,  // Torneos sin país asociado (internacionales)
+      },
+      order: [['name', 'ASC']],
+    });
+    res.json({
+      success: true,
+      data: tournaments
+    });
+  } catch (error) {
+    console.error('Error en /tournaments/international:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener torneos internacionales'
+    });
   }
 });
 
