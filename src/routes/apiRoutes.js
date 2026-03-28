@@ -217,6 +217,56 @@ router.get('/tournaments/international', async (req, res) => {
   }
 });
 
+// Buscar sala por código
+router.get('/rooms/find-by-code', async (req, res) => {
+  try {
+    const { code } = req.query;
+    if (!code || code.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Código de sala requerido'
+      });
+    }
+
+    // Buscar sala cuyo ID comience con el código
+    const rooms = await Room.findAll({
+      where: {
+        id: {
+          [Sequelize.Op.like]: `${code}%`
+        },
+        status: 'active'
+      },
+      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee']
+    });
+
+    if (rooms.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sala no encontrada'
+      });
+    }
+
+    // Tomar la primera sala que coincida
+    const room = rooms[0];
+
+    res.json({
+      success: true,
+      roomId: room.id,
+      data: {
+        partido: `${room.team_home} vs ${room.team_away}`,
+        fecha: room.match_date,
+        entrada: room.entry_fee
+      }
+    });
+  } catch (error) {
+    console.error('Error en /rooms/find-by-code:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al buscar la sala'
+    });
+  }
+});
+
 // Buscar próximos partidos de un equipo
 router.get('/team-fixtures', async (req, res) => {
   try {
