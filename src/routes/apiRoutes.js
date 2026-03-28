@@ -2,12 +2,14 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const apiSportsService = require('../services/apiSportsService');
+const { Op } = require('sequelize');
 
 // Importar modelos
 const Continent = require('../models/Continent');
 const Country = require('../models/Country');
 const Tournament = require('../models/Tournament');
 const Team = require('../models/Team');
+const Room = require('../models/Room');
 
 // Todas las rutas requieren autenticación
 router.use(authMiddleware);
@@ -33,7 +35,7 @@ router.get('/countries', async (req, res) => {
     const { continentId } = req.query;
     const where = {};
     if (continentId) where.continent_id = parseInt(continentId);
-
+    
     const countries = await Country.findAll({
       where,
       order: [['name', 'ASC']],
@@ -51,7 +53,7 @@ router.get('/tournaments', async (req, res) => {
     const { countryId } = req.query;
     const where = {};
     if (countryId) where.country_id = parseInt(countryId);
-
+    
     const tournaments = await Tournament.findAll({
       where,
       include: [{ model: Country, as: 'country' }],
@@ -68,12 +70,11 @@ router.get('/tournaments', async (req, res) => {
 router.get('/tournaments/by-continent', async (req, res) => {
   try {
     const { continentId } = req.query;
-
+    
     let tournaments = [];
-
-    // Mapeo de torneos por continente basado en el nombre del continente
+    
     const continentName = await Continent.findByPk(continentId);
-
+    
     if (continentName) {
       if (continentName.name === 'Sudamérica') {
         tournaments = await Tournament.findAll({
@@ -106,13 +107,29 @@ router.get('/tournaments/by-continent', async (req, res) => {
         });
       }
     }
-
+    
     res.json({ success: true, data: tournaments });
   } catch (error) {
     console.error('Error en /tournaments/by-continent:', error);
     res.status(500).json({ success: false, message: 'Error al obtener torneos del continente' });
   }
 });
+
+// Obtener torneos internacionales
+router.get('/tournaments/international', async (req, res) => {
+  try {
+    const tournaments = await Tournament.findAll({
+      where: { country_id: null },
+      order: [['name', 'ASC']],
+    });
+    res.json({ success: true, data: tournaments });
+  } catch (error) {
+    console.error('Error en /tournaments/international:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener torneos internacionales' });
+  }
+});
+
+// ============ RUTAS PARA EQUIPOS ============
 
 // Obtener equipos por torneo
 router.get('/teams-by-tournament', async (req, res) => {
@@ -144,44 +161,14 @@ router.get('/teams-by-tournament', async (req, res) => {
   }
 });
 
-// ============ RUTAS PARA API-SPORTS (OPCIONALES) ============
-
-// Buscar equipos por nombre
-router.get('/search-teams', async (req, res) => {
-  try {
-    const { q, league } = req.query;
-    if (!q || q.length < 2) {
-      return res.status(400).json({
-        success: false,
-        message: 'Nombre de equipo muy corto (mínimo 2 caracteres)'
-      });
-    }
-
-    const teams = await apiSportsService.searchTeams(q, league);
-    res.json({ success: true, data: teams });
-  } catch (error) {
-    console.error('Error en /search-teams:', error);
-    if (error.message && error.message.includes('suspended')) {
-      res.json({ success: true, data: [], message: 'API temporalmente no disponible' });
-    } else {
-      res.status(500).json({ success: false, message: 'Error al buscar equipos' });
-    }
-  }
-});
-
 // Obtener equipos internacionales (selecciones nacionales)
 router.get('/teams/international', async (req, res) => {
   try {
-    console.log("Fetching international teams...");
     const teams = await Team.findAll({
-      where: {
-        tournament_id: null,
-      },
+      where: { tournament_id: null },
       attributes: ['id', 'name'],
       order: [['name', 'ASC']],
     });
-    console.log(`Found ${teams.length} international teams`);
-    console.log("First 10:", teams.slice(0, 10).map(t => t.name));
     res.json({
       success: true,
       data: teams
@@ -195,27 +182,7 @@ router.get('/teams/international', async (req, res) => {
   }
 });
 
-// Obtener torneos internacionales
-router.get('/tournaments/international', async (req, res) => {
-  try {
-    const tournaments = await Tournament.findAll({
-      where: {
-        country_id: null,  // Torneos sin país asociado (internacionales)
-      },
-      order: [['name', 'ASC']],
-    });
-    res.json({
-      success: true,
-      data: tournaments
-    });
-  } catch (error) {
-    console.error('Error en /tournaments/international:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener torneos internacionales'
-    });
-  }
-});
+// ============ RUTAS PARA SALAS ============
 
 // Buscar sala por código
 router.get('/rooms/find-by-code', async (req, res) => {
@@ -224,7 +191,7 @@ router.get('/rooms/find-by-code', async (req, res) => {
     if (!code || code.length < 3) {
       return res.status(400).json({
         success: false,
-        message: 'Código de sala requerido'
+        message: 'Código de sala requerido (mínimo 3 caracteres)'
       });
     }
 
@@ -232,7 +199,7 @@ router.get('/rooms/find-by-code', async (req, res) => {
     const rooms = await Room.findAll({
       where: {
         id: {
-          [Sequelize.Op.like]: `${code}%`
+          [Op.like]: `${code}%`
         },
         status: 'active'
       },
@@ -264,6 +231,31 @@ router.get('/rooms/find-by-code', async (req, res) => {
       success: false,
       message: 'Error al buscar la sala'
     });
+  }
+});
+
+// ============ RUTAS PARA API-SPORTS (OPCIONALES) ============
+
+// Buscar equipos por nombre
+router.get('/search-teams', async (req, res) => {
+  try {
+    const { q, league } = req.query;
+    if (!q || q.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nombre de equipo muy corto (mínimo 2 caracteres)'
+      });
+    }
+
+    const teams = await apiSportsService.searchTeams(q, league);
+    res.json({ success: true, data: teams });
+  } catch (error) {
+    console.error('Error en /search-teams:', error);
+    if (error.message && error.message.includes('suspended')) {
+      res.json({ success: true, data: [], message: 'API temporalmente no disponible' });
+    } else {
+      res.status(500).json({ success: false, message: 'Error al buscar equipos' });
+    }
   }
 });
 
