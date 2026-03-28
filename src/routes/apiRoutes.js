@@ -183,7 +183,6 @@ router.get('/teams/international', async (req, res) => {
 });
 
 // ============ RUTAS PARA SALAS ============
-
 // Buscar sala por código
 router.get('/rooms/find-by-code', async (req, res) => {
   try {
@@ -195,26 +194,21 @@ router.get('/rooms/find-by-code', async (req, res) => {
       });
     }
 
-    // Buscar sala cuyo ID comience con el código
-    const rooms = await Room.findAll({
+    // Buscar sala por room_code
+    const room = await Room.findOne({
       where: {
-        id: {
-          [Op.like]: `${code}%`
-        },
+        room_code: code.toUpperCase(),
         status: 'active'
       },
       attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee']
     });
 
-    if (rooms.length === 0) {
+    if (!room) {
       return res.status(404).json({
         success: false,
         message: 'Sala no encontrada'
       });
     }
-
-    // Tomar la primera sala que coincida
-    const room = rooms[0];
 
     res.json({
       success: true,

@@ -124,6 +124,7 @@ exports.createRoom = async (req, res) => {
       });
     }
     
+    // Crear la sala
     const room = await Room.create({
       bar_id: barId,
       name: name || `${team_home} vs ${team_away}`,
@@ -138,9 +139,14 @@ exports.createRoom = async (req, res) => {
       total_pool: 0,
     });
     
+    // Generar código de sala (primeros 6 caracteres del ID)
+    const roomCode = room.id.substring(0, 6).toUpperCase();
+    await room.update({ room_code: roomCode });
+    
     res.status(201).json({
       success: true,
       data: room,
+      room_code: roomCode,
       message: 'Sala creada exitosamente',
     });
   } catch (error) {
@@ -173,6 +179,7 @@ exports.getRoomDetails = async (req, res) => {
       success: true,
       data: {
         id: room.id,
+        room_code: room.room_code,
         partido: `${room.team_home} vs ${room.team_away}`,
         fecha: room.match_date,
         cierre: room.prediction_close_time,

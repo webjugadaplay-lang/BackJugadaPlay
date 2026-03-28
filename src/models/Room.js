@@ -52,6 +52,11 @@ const Room = sequelize.define('Room', {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0,
   },
+  room_code: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    unique: true,
+  },
   api_fixture_id: {
     type: DataTypes.INTEGER,
     allowNull: true,
