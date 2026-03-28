@@ -113,6 +113,36 @@ router.get('/tournaments/by-continent', async (req, res) => {
   }
 });
 
+// Obtener equipos por torneo
+router.get('/teams-by-tournament', async (req, res) => {
+  try {
+    const { tournamentId } = req.query;
+    if (!tournamentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de torneo requerido'
+      });
+    }
+
+    const teams = await Team.findAll({
+      where: { tournament_id: parseInt(tournamentId) },
+      attributes: ['id', 'name'],
+      order: [['name', 'ASC']],
+    });
+
+    res.json({
+      success: true,
+      data: teams
+    });
+  } catch (error) {
+    console.error('Error en /teams-by-tournament:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener equipos del torneo'
+    });
+  }
+});
+
 // ============ RUTAS PARA API-SPORTS (OPCIONALES) ============
 
 // Buscar equipos por nombre
