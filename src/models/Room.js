@@ -52,7 +52,6 @@ const Room = sequelize.define('Room', {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0,
   },
-  // Campos opcionales de API
   api_fixture_id: {
     type: DataTypes.INTEGER,
     allowNull: true,

@@ -28,6 +28,7 @@ const Tournament = sequelize.define('Tournament', {
   tableName: 'tournaments',
 });
 
+// Asociación
 Tournament.associate = (models) => {
   Tournament.belongsTo(models.Country, { foreignKey: 'country_id', as: 'country' });
 };

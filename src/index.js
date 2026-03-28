@@ -28,24 +28,27 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Servidor funcionando' });
 });
 
-// Sincronizar base de datos y arrancar servidor
-sequelize.sync({ alter: true }) // alter: true actualiza tablas sin borrar datos
-  .then(() => {
-    console.log('Base de datos conectada');
-
-    // Cargar asociaciones después de que los modelos estén sincronizados
+// Sincronizar base de datos
+sequelize.sync({ alter: true })
+  .then(async () => {
+    console.log('Base de datos sincronizada');
+    
+    // Cargar modelos
     const User = require('./models/User');
     const Room = require('./models/Room');
     const Prediction = require('./models/Prediction');
     const Payment = require('./models/Payment');
     const MatchResult = require('./models/MatchResult');
-
+    const Continent = require('./models/Continent');
+    const Country = require('./models/Country');
+    const Tournament = require('./models/Tournament');
+    
     // Configurar asociaciones
-    const models = { User, Room, Prediction, Payment, MatchResult };
+    const models = { User, Room, Prediction, Payment, MatchResult, Continent, Country, Tournament };
     Object.values(models).forEach(model => {
       if (model.associate) model.associate(models);
     });
-
+    
     app.listen(PORT, () => {
       console.log(`Servidor corriendo en http://localhost:${PORT}`);
     });

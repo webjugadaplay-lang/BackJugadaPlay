@@ -30,16 +30,13 @@ router.get('/continents', async (req, res) => {
 router.get('/countries', async (req, res) => {
   try {
     const { continentId } = req.query;
-    console.log("GET /countries - continentId:", continentId);
     const where = {};
     if (continentId) where.continent_id = parseInt(continentId);
     
     const countries = await Country.findAll({
       where,
-      include: [{ model: Continent, as: 'continent' }],
       order: [['name', 'ASC']],
     });
-    console.log("Countries found:", countries.length);
     res.json({ success: true, data: countries });
   } catch (error) {
     console.error('Error en /countries:', error);

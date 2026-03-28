@@ -10,18 +10,10 @@ const Prediction = sequelize.define('Prediction', {
   room_id: {
     type: DataTypes.UUID,
     allowNull: false,
-    references: {
-      model: 'rooms',
-      key: 'id',
-    },
   },
   user_id: {
     type: DataTypes.UUID,
     allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id',
-    },
   },
   score_home: {
     type: DataTypes.INTEGER,
@@ -40,10 +32,10 @@ const Prediction = sequelize.define('Prediction', {
   tableName: 'predictions',
 });
 
+// Asociaciones
 Prediction.associate = (models) => {
-  Prediction.belongsTo(models.Room, { foreignKey: 'room_id' });
-  Prediction.belongsTo(models.User, { foreignKey: 'user_id' });
+  Prediction.belongsTo(models.Room, { foreignKey: 'room_id', as: 'room' });
+  Prediction.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
 };
-
 
 module.exports = Prediction;

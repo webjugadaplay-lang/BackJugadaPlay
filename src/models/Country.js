@@ -33,6 +33,7 @@ const Country = sequelize.define('Country', {
   tableName: 'countries',
 });
 
+// Asociaciones
 Country.associate = (models) => {
   Country.belongsTo(models.Continent, { foreignKey: 'continent_id', as: 'continent' });
   Country.hasMany(models.Tournament, { foreignKey: 'country_id', as: 'tournaments' });

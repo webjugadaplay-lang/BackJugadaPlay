@@ -22,6 +22,7 @@ const Continent = sequelize.define('Continent', {
   tableName: 'continents',
 });
 
+// Asociación
 Continent.associate = (models) => {
   Continent.hasMany(models.Country, { foreignKey: 'continent_id', as: 'countries' });
 };
