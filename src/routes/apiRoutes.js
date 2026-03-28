@@ -172,13 +172,16 @@ router.get('/search-teams', async (req, res) => {
 // Obtener equipos internacionales (selecciones nacionales)
 router.get('/teams/international', async (req, res) => {
   try {
+    console.log("Fetching international teams...");
     const teams = await Team.findAll({
       where: {
-        country_id: null,  // Equipos sin país asociado (selecciones)
+        tournament_id: null,
       },
       attributes: ['id', 'name'],
       order: [['name', 'ASC']],
     });
+    console.log(`Found ${teams.length} international teams`);
+    console.log("First 10:", teams.slice(0, 10).map(t => t.name));
     res.json({
       success: true,
       data: teams
