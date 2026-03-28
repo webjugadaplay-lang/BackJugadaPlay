@@ -7,6 +7,7 @@ const apiSportsService = require('../services/apiSportsService');
 const Continent = require('../models/Continent');
 const Country = require('../models/Country');
 const Tournament = require('../models/Tournament');
+const Team = require('../models/Team');
 
 // Todas las rutas requieren autenticación
 router.use(authMiddleware);

@@ -32,7 +32,7 @@ app.get('/api/health', (req, res) => {
 sequelize.sync({ alter: true })
   .then(async () => {
     console.log('Base de datos sincronizada');
-    
+
     // Cargar modelos
     const User = require('./models/User');
     const Room = require('./models/Room');
@@ -42,13 +42,14 @@ sequelize.sync({ alter: true })
     const Continent = require('./models/Continent');
     const Country = require('./models/Country');
     const Tournament = require('./models/Tournament');
-    
+    const Team = require('./models/Team');
+
     // Configurar asociaciones
-    const models = { User, Room, Prediction, Payment, MatchResult, Continent, Country, Tournament };
+    const models = { User, Room, Prediction, Payment, MatchResult, Continent, Country, Tournament, Team };
     Object.values(models).forEach(model => {
       if (model.associate) model.associate(models);
     });
-    
+
     app.listen(PORT, () => {
       console.log(`Servidor corriendo en http://localhost:${PORT}`);
     });
