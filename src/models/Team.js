@@ -13,7 +13,7 @@ const Team = sequelize.define('Team', {
   },
   country_id: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,  // Permitir NULL para selecciones nacionales
     references: {
       model: 'countries',
       key: 'id',
@@ -21,7 +21,7 @@ const Team = sequelize.define('Team', {
   },
   tournament_id: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,  // Permitir NULL para selecciones nacionales
     references: {
       model: 'tournaments',
       key: 'id',
