@@ -15,10 +15,12 @@ const User = require('../models/User');
 
 // ============ RUTAS PÚBLICAS (NO REQUIEREN AUTENTICACIÓN) ============
 
-// Buscar sala por código - PÚBLICA (no requiere token)
+// Buscar sala por código - DEVUELVE EL ID COMPLETO
 router.get('/rooms/find-by-code', async (req, res) => {
   try {
     const { code } = req.query;
+    console.log("🔍 Buscando sala con código:", code);
+    
     if (!code || code.length < 3) {
       return res.status(400).json({
         success: false,
@@ -32,8 +34,10 @@ router.get('/rooms/find-by-code', async (req, res) => {
         room_code: code.toUpperCase(),
         status: 'active'
       },
-      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee']
+      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee', 'total_pool']
     });
+
+    console.log("📦 Sala encontrada:", room ? room.id : "NO ENCONTRADA");
 
     if (!room) {
       return res.status(404).json({
@@ -44,11 +48,13 @@ router.get('/rooms/find-by-code', async (req, res) => {
 
     res.json({
       success: true,
-      roomId: room.id,
+      roomId: room.id,  // Enviamos el UUID completo
+      roomCode: code.toUpperCase(),
       data: {
         partido: `${room.team_home} vs ${room.team_away}`,
         fecha: room.match_date,
-        entrada: room.entry_fee
+        entrada: room.entry_fee,
+        pozo: room.total_pool
       }
     });
   } catch (error) {
@@ -59,6 +65,7 @@ router.get('/rooms/find-by-code', async (req, res) => {
     });
   }
 });
+
 
 // ============ RUTAS PROTEGIDAS (REQUIEREN AUTENTICACIÓN) ============
 
@@ -467,6 +474,93 @@ router.post('/player/prediction', async (req, res) => {
   } catch (error) {
     console.error('Error en /player/prediction:', error);
     res.status(500).json({ success: false, message: 'Error al guardar predicción' });
+  }
+});
+
+// ============ RUTAS PARA SALAS ============
+
+// Buscar sala por código - DEVUELVE EL ID COMPLETO
+router.get('/rooms/find-by-code', async (req, res) => {
+  try {
+    const { code } = req.query;
+    console.log("🔍 Buscando sala con código:", code);
+    
+    if (!code || code.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Código de sala requerido (mínimo 3 caracteres)'
+      });
+    }
+
+    // Buscar sala cuyo room_code coincida exactamente con el código
+    const room = await Room.findOne({
+      where: {
+        room_code: code.toUpperCase(),
+        status: 'active'
+      },
+      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee', 'total_pool']
+    });
+
+    console.log("📦 Sala encontrada:", room ? room.id : "NO ENCONTRADA");
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sala no encontrada'
+      });
+    }
+
+    res.json({
+      success: true,
+      roomId: room.id,  // Enviamos el UUID completo
+      roomCode: code.toUpperCase(),
+      data: {
+        partido: `${room.team_home} vs ${room.team_away}`,
+        fecha: room.match_date,
+        entrada: room.entry_fee,
+        pozo: room.total_pool
+      }
+    });
+  } catch (error) {
+    console.error('Error en /rooms/find-by-code:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al buscar la sala'
+    });
+  }
+});
+
+// Obtener detalles de una sala por ID (para la página de predicción)
+router.get('/rooms/:roomId', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    
+    console.log("🔍 Buscando sala con ID:", roomId);
+    
+    if (!roomId || roomId === 'undefined') {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de sala inválido'
+      });
+    }
+    
+    const room = await Room.findByPk(roomId, {
+      include: [{
+        model: User,
+        as: 'bar',
+        attributes: ['id', 'name', 'bar_name']
+      }],
+      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'prediction_close_time', 'entry_fee', 'total_pool', 'status', 'room_code']
+    });
+    
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Sala no encontrada' });
+    }
+    
+    res.json({ success: true, data: room });
+  } catch (error) {
+    console.error('Error en /rooms/:roomId:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener la sala' });
   }
 });
 
