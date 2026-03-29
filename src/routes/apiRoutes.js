@@ -330,4 +330,42 @@ router.get('/fixture/:id/statistics', async (req, res) => {
   }
 });
 
+// Obtener todas las predicciones del jugador
+router.get('/player/predictions', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const predictions = await Prediction.findAll({
+      where: { user_id: userId },
+      include: [{
+        model: Room,
+        as: 'room',
+        attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee', 'total_pool', 'status']
+      }],
+      order: [[{ model: Room, as: 'room' }, 'match_date', 'ASC']]
+    });
+    
+    res.json({ success: true, data: predictions });
+  } catch (error) {
+    console.error('Error en /player/predictions:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener predicciones' });
+  }
+});
+
+// Obtener resultado de un partido por sala
+router.get('/player/match-result/:roomId', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    
+    const result = await MatchResult.findOne({
+      where: { room_id: roomId }
+    });
+    
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error en /player/match-result/:roomId:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener resultado' });
+  }
+});
+
 module.exports = router;
