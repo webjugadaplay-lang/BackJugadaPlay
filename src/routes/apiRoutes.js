@@ -11,7 +11,56 @@ const Tournament = require('../models/Tournament');
 const Team = require('../models/Team');
 const Room = require('../models/Room');
 
-// Todas las rutas requieren autenticación
+// ============ RUTAS PÚBLICAS (NO REQUIEREN AUTENTICACIÓN) ============
+
+// Buscar sala por código - PÚBLICA (no requiere token)
+router.get('/rooms/find-by-code', async (req, res) => {
+  try {
+    const { code } = req.query;
+    if (!code || code.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Código de sala requerido (mínimo 3 caracteres)'
+      });
+    }
+
+    // Buscar sala cuyo room_code coincida exactamente con el código
+    const room = await Room.findOne({
+      where: {
+        room_code: code.toUpperCase(),
+        status: 'active'
+      },
+      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee']
+    });
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sala no encontrada'
+      });
+    }
+
+    res.json({
+      success: true,
+      roomId: room.id,
+      data: {
+        partido: `${room.team_home} vs ${room.team_away}`,
+        fecha: room.match_date,
+        entrada: room.entry_fee
+      }
+    });
+  } catch (error) {
+    console.error('Error en /rooms/find-by-code:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al buscar la sala'
+    });
+  }
+});
+
+// ============ RUTAS PROTEGIDAS (REQUIEREN AUTENTICACIÓN) ============
+
+// Todas las rutas a partir de aquí requieren autenticación
 router.use(authMiddleware);
 
 // ============ RUTAS PARA TORNEOS (MANUALES) ============
@@ -178,53 +227,6 @@ router.get('/teams/international', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al obtener equipos internacionales'
-    });
-  }
-});
-
-// ============ RUTAS PARA SALAS ============
-
-// Buscar sala por código
-router.get('/rooms/find-by-code', async (req, res) => {
-  try {
-    const { code } = req.query;
-    if (!code || code.length < 3) {
-      return res.status(400).json({
-        success: false,
-        message: 'Código de sala requerido (mínimo 3 caracteres)'
-      });
-    }
-
-    // Buscar sala cuyo room_code coincida exactamente con el código
-    const room = await Room.findOne({
-      where: {
-        room_code: code.toUpperCase(),
-        status: 'active'
-      },
-      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee']
-    });
-
-    if (!room) {
-      return res.status(404).json({
-        success: false,
-        message: 'Sala no encontrada'
-      });
-    }
-
-    res.json({
-      success: true,
-      roomId: room.id,
-      data: {
-        partido: `${room.team_home} vs ${room.team_away}`,
-        fecha: room.match_date,
-        entrada: room.entry_fee
-      }
-    });
-  } catch (error) {
-    console.error('Error en /rooms/find-by-code:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al buscar la sala'
     });
   }
 });
