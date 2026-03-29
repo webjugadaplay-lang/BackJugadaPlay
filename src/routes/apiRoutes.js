@@ -4,7 +4,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 const apiSportsService = require('../services/apiSportsService');
 const { Op } = require('sequelize');
 
-// Importar modelos
+// Modelos
 const Continent = require('../models/Continent');
 const Country = require('../models/Country');
 const Tournament = require('../models/Tournament');
@@ -13,14 +13,15 @@ const Room = require('../models/Room');
 const Prediction = require('../models/Prediction');
 const User = require('../models/User');
 
-// ============ RUTAS PÚBLICAS (NO REQUIEREN AUTENTICACIÓN) ============
 
-// Buscar sala por código - DEVUELVE EL ID COMPLETO
+// ================= PUBLIC =================
+
+// Buscar sala por código
 router.get('/rooms/find-by-code', async (req, res) => {
   try {
     const { code } = req.query;
     console.log("🔍 Buscando sala con código:", code);
-    
+
     if (!code || code.length < 3) {
       return res.status(400).json({
         success: false,
@@ -28,13 +29,12 @@ router.get('/rooms/find-by-code', async (req, res) => {
       });
     }
 
-    // Buscar sala cuyo room_code coincida exactamente con el código
     const room = await Room.findOne({
       where: {
         room_code: code.toUpperCase(),
         status: 'active'
       },
-      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee', 'total_pool']
+      attributes: ['id', 'team_home', 'team_away', 'match_date', 'entry_fee', 'total_pool']
     });
 
     console.log("📦 Sala encontrada:", room ? room.id : "NO ENCONTRADA");
@@ -48,15 +48,9 @@ router.get('/rooms/find-by-code', async (req, res) => {
 
     res.json({
       success: true,
-      roomId: room.id,  // Enviamos el UUID completo
-      roomCode: code.toUpperCase(),
-      data: {
-        partido: `${room.team_home} vs ${room.team_away}`,
-        fecha: room.match_date,
-        entrada: room.entry_fee,
-        pozo: room.total_pool
-      }
+      roomId: room.id
     });
+
   } catch (error) {
     console.error('Error en /rooms/find-by-code:', error);
     res.status(500).json({
@@ -67,14 +61,11 @@ router.get('/rooms/find-by-code', async (req, res) => {
 });
 
 
-// ============ RUTAS PROTEGIDAS (REQUIEREN AUTENTICACIÓN) ============
-
-// Todas las rutas a partir de aquí requieren autenticación
+// ================= PRIVATE =================
 router.use(authMiddleware);
 
-// ============ RUTAS PARA TORNEOS (MANUALES) ============
 
-// Obtener todos los continentes
+// ===== CONTINENTES =====
 router.get('/continents', async (req, res) => {
   try {
     const continents = await Continent.findAll({
@@ -83,11 +74,12 @@ router.get('/continents', async (req, res) => {
     res.json({ success: true, data: continents });
   } catch (error) {
     console.error('Error en /continents:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener continentes' });
+    res.status(500).json({ success: false });
   }
 });
 
-// Obtener países por continente
+
+// ===== COUNTRIES =====
 router.get('/countries', async (req, res) => {
   try {
     const { continentId } = req.query;
@@ -98,14 +90,17 @@ router.get('/countries', async (req, res) => {
       where,
       order: [['name', 'ASC']],
     });
+
     res.json({ success: true, data: countries });
+
   } catch (error) {
     console.error('Error en /countries:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener países' });
+    res.status(500).json({ success: false });
   }
 });
 
-// Obtener torneos por país
+
+// ===== TOURNAMENTS =====
 router.get('/tournaments', async (req, res) => {
   try {
     const { countryId } = req.query;
@@ -117,87 +112,23 @@ router.get('/tournaments', async (req, res) => {
       include: [{ model: Country, as: 'country' }],
       order: [['name', 'ASC']],
     });
+
     res.json({ success: true, data: tournaments });
+
   } catch (error) {
     console.error('Error en /tournaments:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener torneos' });
+    res.status(500).json({ success: false });
   }
 });
 
-// Obtener torneos por continente (torneos internacionales)
-router.get('/tournaments/by-continent', async (req, res) => {
-  try {
-    const { continentId } = req.query;
 
-    let tournaments = [];
-
-    const continentName = await Continent.findByPk(continentId);
-
-    if (continentName) {
-      if (continentName.name === 'Sudamérica') {
-        tournaments = await Tournament.findAll({
-          where: {
-            name: ['Copa Libertadores', 'Copa Sudamericana', 'Copa América', 'Recopa Sudamericana'],
-            country_id: null,
-          },
-          order: [['name', 'ASC']],
-        });
-      } else if (continentName.name === 'Europa') {
-        tournaments = await Tournament.findAll({
-          where: {
-            name: ['UEFA Champions League', 'UEFA Europa League', 'UEFA Europa Conference League', 'Eurocopa', 'Supercopa Europea'],
-            country_id: null,
-          },
-          order: [['name', 'ASC']],
-        });
-      } else if (continentName.name === 'Mundial') {
-        tournaments = await Tournament.findAll({
-          where: {
-            name: ['Copa Mundial FIFA'],
-            country_id: null,
-          },
-          order: [['name', 'ASC']],
-        });
-      } else {
-        tournaments = await Tournament.findAll({
-          where: { country_id: null },
-          order: [['name', 'ASC']],
-        });
-      }
-    }
-
-    res.json({ success: true, data: tournaments });
-  } catch (error) {
-    console.error('Error en /tournaments/by-continent:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener torneos del continente' });
-  }
-});
-
-// Obtener torneos internacionales
-router.get('/tournaments/international', async (req, res) => {
-  try {
-    const tournaments = await Tournament.findAll({
-      where: { country_id: null },
-      order: [['name', 'ASC']],
-    });
-    res.json({ success: true, data: tournaments });
-  } catch (error) {
-    console.error('Error en /tournaments/international:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener torneos internacionales' });
-  }
-});
-
-// ============ RUTAS PARA EQUIPOS ============
-
-// Obtener equipos por torneo
+// ===== TEAMS =====
 router.get('/teams-by-tournament', async (req, res) => {
   try {
     const { tournamentId } = req.query;
+
     if (!tournamentId) {
-      return res.status(400).json({
-        success: false,
-        message: 'ID de torneo requerido'
-      });
+      return res.status(400).json({ success: false });
     }
 
     const teams = await Team.findAll({
@@ -206,181 +137,28 @@ router.get('/teams-by-tournament', async (req, res) => {
       order: [['name', 'ASC']],
     });
 
-    res.json({
-      success: true,
-      data: teams
-    });
+    res.json({ success: true, data: teams });
+
   } catch (error) {
     console.error('Error en /teams-by-tournament:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener equipos del torneo'
-    });
+    res.status(500).json({ success: false });
   }
 });
 
-// Obtener equipos internacionales (selecciones nacionales)
-router.get('/teams/international', async (req, res) => {
-  try {
-    const teams = await Team.findAll({
-      where: { tournament_id: null },
-      attributes: ['id', 'name'],
-      order: [['name', 'ASC']],
-    });
-    res.json({
-      success: true,
-      data: teams
-    });
-  } catch (error) {
-    console.error('Error en /teams/international:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener equipos internacionales'
-    });
-  }
-});
 
-// ============ RUTAS PARA API-SPORTS (OPCIONALES) ============
-
-// Buscar equipos por nombre
-router.get('/search-teams', async (req, res) => {
-  try {
-    const { q, league } = req.query;
-    if (!q || q.length < 2) {
-      return res.status(400).json({
-        success: false,
-        message: 'Nombre de equipo muy corto (mínimo 2 caracteres)'
-      });
-    }
-
-    const teams = await apiSportsService.searchTeams(q, league);
-    res.json({ success: true, data: teams });
-  } catch (error) {
-    console.error('Error en /search-teams:', error);
-    if (error.message && error.message.includes('suspended')) {
-      res.json({ success: true, data: [], message: 'API temporalmente no disponible' });
-    } else {
-      res.status(500).json({ success: false, message: 'Error al buscar equipos' });
-    }
-  }
-});
-
-// Buscar próximos partidos de un equipo
-router.get('/team-fixtures', async (req, res) => {
-  try {
-    const { teamId, next = 10 } = req.query;
-    if (!teamId) {
-      return res.status(400).json({
-        success: false,
-        message: 'ID de equipo requerido'
-      });
-    }
-
-    const fixtures = await apiSportsService.getTeamFixtures(parseInt(teamId), parseInt(next));
-    res.json({ success: true, data: fixtures });
-  } catch (error) {
-    console.error('Error en /team-fixtures:', error);
-    if (error.message && error.message.includes('suspended')) {
-      res.json({ success: true, data: [], message: 'API temporalmente no disponible' });
-    } else {
-      res.status(500).json({ success: false, message: 'Error al buscar partidos' });
-    }
-  }
-});
-
-// Obtener detalles de un fixture
-router.get('/fixture/:id', async (req, res) => {
-  try {
-    const fixture = await apiSportsService.getFixtureById(req.params.id);
-    if (!fixture) {
-      return res.status(404).json({
-        success: false,
-        message: 'Partido no encontrado'
-      });
-    }
-    res.json({ success: true, data: fixture });
-  } catch (error) {
-    console.error('Error en /fixture/:id:', error);
-    if (error.message && error.message.includes('suspended')) {
-      res.json({ success: true, data: null, message: 'API temporalmente no disponible' });
-    } else {
-      res.status(500).json({ success: false, message: 'Error al obtener detalles del partido' });
-    }
-  }
-});
-
-// Obtener goles de un partido
-router.get('/fixture/:id/goals', async (req, res) => {
-  try {
-    const goals = await apiSportsService.getFixtureGoals(req.params.id);
-    res.json({ success: true, data: goals });
-  } catch (error) {
-    console.error('Error en /fixture/:id/goals:', error);
-    if (error.message && error.message.includes('suspended')) {
-      res.json({ success: true, data: [], message: 'API temporalmente no disponible' });
-    } else {
-      res.status(500).json({ success: false, message: 'Error al obtener goles del partido' });
-    }
-  }
-});
-
-// Obtener estadísticas de un partido
-router.get('/fixture/:id/statistics', async (req, res) => {
-  try {
-    const statistics = await apiSportsService.getFixtureStatistics(req.params.id);
-    res.json({ success: true, data: statistics });
-  } catch (error) {
-    console.error('Error en /fixture/:id/statistics:', error);
-    if (error.message && error.message.includes('suspended')) {
-      res.json({ success: true, data: [], message: 'API temporalmente no disponible' });
-    } else {
-      res.status(500).json({ success: false, message: 'Error al obtener estadísticas del partido' });
-    }
-  }
-});
-
-// Obtener todas las predicciones del jugador
-router.get('/player/predictions', async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    const predictions = await Prediction.findAll({
-      where: { user_id: userId },
-      include: [{
-        model: Room,
-        as: 'room',
-        attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee', 'total_pool', 'status']
-      }],
-      order: [[{ model: Room, as: 'room' }, 'match_date', 'ASC']]
-    });
-
-    res.json({ success: true, data: predictions });
-  } catch (error) {
-    console.error('Error en /player/predictions:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener predicciones' });
-  }
-});
-
-// Obtener resultado de un partido por sala
-router.get('/player/match-result/:roomId', async (req, res) => {
-  try {
-    const { roomId } = req.params;
-
-    const result = await MatchResult.findOne({
-      where: { room_id: roomId }
-    });
-
-    res.json({ success: true, data: result });
-  } catch (error) {
-    console.error('Error en /player/match-result/:roomId:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener resultado' });
-  }
-});
-
-// Obtener detalles de una sala por ID (público para jugadores)
+// ===== ROOM BY ID (SOLO UNA VEZ, CORRECTO) =====
 router.get('/rooms/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
+
+    console.log("🔍 Buscando sala con ID:", roomId);
+
+    if (!roomId || roomId === 'undefined') {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de sala inválido'
+      });
+    }
 
     const room = await Room.findByPk(roomId, {
       include: [{
@@ -388,79 +166,62 @@ router.get('/rooms/:roomId', async (req, res) => {
         as: 'bar',
         attributes: ['id', 'name', 'bar_name']
       }],
-      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'prediction_close_time', 'entry_fee', 'total_pool', 'status']
+      attributes: [
+        'id',
+        'name',
+        'team_home',
+        'team_away',
+        'match_date',
+        'prediction_close_time',
+        'entry_fee',
+        'total_pool',
+        'status',
+        'room_code'
+      ]
     });
 
     if (!room) {
-      return res.status(404).json({ success: false, message: 'Sala no encontrada' });
+      return res.status(404).json({
+        success: false,
+        message: 'Sala no encontrada'
+      });
     }
 
     res.json({ success: true, data: room });
+
   } catch (error) {
     console.error('Error en /rooms/:roomId:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener la sala' });
-  }
-});
-
-// Obtener predicción del jugador para una sala específica
-router.get('/player/prediction/:roomId', async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { roomId } = req.params;
-
-    const prediction = await Prediction.findOne({
-      where: {
-        user_id: userId,
-        room_id: roomId
-      }
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener la sala'
     });
-
-    res.json({ success: true, data: prediction });
-  } catch (error) {
-    console.error('Error en /player/prediction/:roomId:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener predicción' });
   }
 });
 
-// Guardar o actualizar predicción del jugador
+
+// ===== PREDICTION =====
 router.post('/player/prediction', async (req, res) => {
   try {
     const userId = req.user.id;
     const { room_id, score_home, score_away } = req.body;
 
-    // Verificar que la sala existe y está activa
+    if (!room_id) {
+      return res.status(400).json({ success: false });
+    }
+
     const room = await Room.findByPk(room_id);
+
     if (!room) {
-      return res.status(404).json({ success: false, message: 'Sala no encontrada' });
+      return res.status(404).json({ success: false });
     }
 
-    if (room.status !== 'active') {
-      return res.status(400).json({ success: false, message: 'La sala no está activa' });
-    }
-
-    // Verificar que la fecha de cierre no ha pasado
-    if (new Date(room.prediction_close_time) < new Date()) {
-      return res.status(400).json({ success: false, message: 'El tiempo para predecir ha expirado' });
-    }
-
-    // Buscar si ya existe una predicción
-    const existingPrediction = await Prediction.findOne({
-      where: {
-        user_id: userId,
-        room_id: room_id
-      }
+    let prediction = await Prediction.findOne({
+      where: { user_id: userId, room_id }
     });
 
-    let prediction;
-    if (existingPrediction) {
-      // Actualizar predicción existente
-      await existingPrediction.update({
-        score_home,
-        score_away
-      });
-      prediction = existingPrediction;
+    if (prediction) {
+      await prediction.update({ score_home, score_away });
     } else {
-      // Crear nueva predicción
       prediction = await Prediction.create({
         user_id: userId,
         room_id,
@@ -470,97 +231,11 @@ router.post('/player/prediction', async (req, res) => {
       });
     }
 
-    res.json({ success: true, data: prediction, message: existingPrediction ? 'Predicción actualizada' : 'Predicción guardada' });
+    res.json({ success: true, data: prediction });
+
   } catch (error) {
     console.error('Error en /player/prediction:', error);
-    res.status(500).json({ success: false, message: 'Error al guardar predicción' });
-  }
-});
-
-// ============ RUTAS PARA SALAS ============
-
-// Buscar sala por código - DEVUELVE EL ID COMPLETO
-router.get('/rooms/find-by-code', async (req, res) => {
-  try {
-    const { code } = req.query;
-    console.log("🔍 Buscando sala con código:", code);
-    
-    if (!code || code.length < 3) {
-      return res.status(400).json({
-        success: false,
-        message: 'Código de sala requerido (mínimo 3 caracteres)'
-      });
-    }
-
-    // Buscar sala cuyo room_code coincida exactamente con el código
-    const room = await Room.findOne({
-      where: {
-        room_code: code.toUpperCase(),
-        status: 'active'
-      },
-      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee', 'total_pool']
-    });
-
-    console.log("📦 Sala encontrada:", room ? room.id : "NO ENCONTRADA");
-
-    if (!room) {
-      return res.status(404).json({
-        success: false,
-        message: 'Sala no encontrada'
-      });
-    }
-
-    res.json({
-      success: true,
-      roomId: room.id,  // Enviamos el UUID completo
-      roomCode: code.toUpperCase(),
-      data: {
-        partido: `${room.team_home} vs ${room.team_away}`,
-        fecha: room.match_date,
-        entrada: room.entry_fee,
-        pozo: room.total_pool
-      }
-    });
-  } catch (error) {
-    console.error('Error en /rooms/find-by-code:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al buscar la sala'
-    });
-  }
-});
-
-// Obtener detalles de una sala por ID (para la página de predicción)
-router.get('/rooms/:roomId', async (req, res) => {
-  try {
-    const { roomId } = req.params;
-    
-    console.log("🔍 Buscando sala con ID:", roomId);
-    
-    if (!roomId || roomId === 'undefined') {
-      return res.status(400).json({
-        success: false,
-        message: 'ID de sala inválido'
-      });
-    }
-    
-    const room = await Room.findByPk(roomId, {
-      include: [{
-        model: User,
-        as: 'bar',
-        attributes: ['id', 'name', 'bar_name']
-      }],
-      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'prediction_close_time', 'entry_fee', 'total_pool', 'status', 'room_code']
-    });
-    
-    if (!room) {
-      return res.status(404).json({ success: false, message: 'Sala no encontrada' });
-    }
-    
-    res.json({ success: true, data: room });
-  } catch (error) {
-    console.error('Error en /rooms/:roomId:', error);
-    res.status(500).json({ success: false, message: 'Error al obtener la sala' });
+    res.status(500).json({ success: false });
   }
 });
 
