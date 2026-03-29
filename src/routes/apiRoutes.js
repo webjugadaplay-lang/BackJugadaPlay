@@ -10,6 +10,8 @@ const Country = require('../models/Country');
 const Tournament = require('../models/Tournament');
 const Team = require('../models/Team');
 const Room = require('../models/Room');
+const Prediction = require('../models/Prediction');
+const User = require('../models/User');
 
 // ============ RUTAS PÚBLICAS (NO REQUIEREN AUTENTICACIÓN) ============
 
