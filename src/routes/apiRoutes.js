@@ -183,6 +183,7 @@ router.get('/teams/international', async (req, res) => {
 });
 
 // ============ RUTAS PARA SALAS ============
+
 // Buscar sala por código
 router.get('/rooms/find-by-code', async (req, res) => {
   try {
@@ -194,7 +195,7 @@ router.get('/rooms/find-by-code', async (req, res) => {
       });
     }
 
-    // Buscar sala por room_code
+    // Buscar sala cuyo room_code coincida exactamente con el código
     const room = await Room.findOne({
       where: {
         room_code: code.toUpperCase(),
