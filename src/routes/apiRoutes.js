@@ -84,7 +84,7 @@ router.get('/countries', async (req, res) => {
     const { continentId } = req.query;
     const where = {};
     if (continentId) where.continent_id = parseInt(continentId);
-    
+
     const countries = await Country.findAll({
       where,
       order: [['name', 'ASC']],
@@ -102,7 +102,7 @@ router.get('/tournaments', async (req, res) => {
     const { countryId } = req.query;
     const where = {};
     if (countryId) where.country_id = parseInt(countryId);
-    
+
     const tournaments = await Tournament.findAll({
       where,
       include: [{ model: Country, as: 'country' }],
@@ -119,11 +119,11 @@ router.get('/tournaments', async (req, res) => {
 router.get('/tournaments/by-continent', async (req, res) => {
   try {
     const { continentId } = req.query;
-    
+
     let tournaments = [];
-    
+
     const continentName = await Continent.findByPk(continentId);
-    
+
     if (continentName) {
       if (continentName.name === 'Sudamérica') {
         tournaments = await Tournament.findAll({
@@ -156,7 +156,7 @@ router.get('/tournaments/by-continent', async (req, res) => {
         });
       }
     }
-    
+
     res.json({ success: true, data: tournaments });
   } catch (error) {
     console.error('Error en /tournaments/by-continent:', error);
@@ -334,7 +334,7 @@ router.get('/fixture/:id/statistics', async (req, res) => {
 router.get('/player/predictions', async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     const predictions = await Prediction.findAll({
       where: { user_id: userId },
       include: [{
@@ -344,7 +344,7 @@ router.get('/player/predictions', async (req, res) => {
       }],
       order: [[{ model: Room, as: 'room' }, 'match_date', 'ASC']]
     });
-    
+
     res.json({ success: true, data: predictions });
   } catch (error) {
     console.error('Error en /player/predictions:', error);
@@ -356,15 +356,115 @@ router.get('/player/predictions', async (req, res) => {
 router.get('/player/match-result/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
-    
+
     const result = await MatchResult.findOne({
       where: { room_id: roomId }
     });
-    
+
     res.json({ success: true, data: result });
   } catch (error) {
     console.error('Error en /player/match-result/:roomId:', error);
     res.status(500).json({ success: false, message: 'Error al obtener resultado' });
+  }
+});
+
+// Obtener detalles de una sala por ID (público para jugadores)
+router.get('/rooms/:roomId', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+
+    const room = await Room.findByPk(roomId, {
+      include: [{
+        model: User,
+        as: 'bar',
+        attributes: ['id', 'name', 'bar_name']
+      }],
+      attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'prediction_close_time', 'entry_fee', 'total_pool', 'status']
+    });
+
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Sala no encontrada' });
+    }
+
+    res.json({ success: true, data: room });
+  } catch (error) {
+    console.error('Error en /rooms/:roomId:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener la sala' });
+  }
+});
+
+// Obtener predicción del jugador para una sala específica
+router.get('/player/prediction/:roomId', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { roomId } = req.params;
+
+    const prediction = await Prediction.findOne({
+      where: {
+        user_id: userId,
+        room_id: roomId
+      }
+    });
+
+    res.json({ success: true, data: prediction });
+  } catch (error) {
+    console.error('Error en /player/prediction/:roomId:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener predicción' });
+  }
+});
+
+// Guardar o actualizar predicción del jugador
+router.post('/player/prediction', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { room_id, score_home, score_away } = req.body;
+
+    // Verificar que la sala existe y está activa
+    const room = await Room.findByPk(room_id);
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Sala no encontrada' });
+    }
+
+    if (room.status !== 'active') {
+      return res.status(400).json({ success: false, message: 'La sala no está activa' });
+    }
+
+    // Verificar que la fecha de cierre no ha pasado
+    if (new Date(room.prediction_close_time) < new Date()) {
+      return res.status(400).json({ success: false, message: 'El tiempo para predecir ha expirado' });
+    }
+
+    // Buscar si ya existe una predicción
+    const existingPrediction = await Prediction.findOne({
+      where: {
+        user_id: userId,
+        room_id: room_id
+      }
+    });
+
+    let prediction;
+    if (existingPrediction) {
+      // Actualizar predicción existente
+      await existingPrediction.update({
+        score_home,
+        score_away
+      });
+      prediction = existingPrediction;
+    } else {
+      // Crear nueva predicción
+      prediction = await Prediction.create({
+        user_id: userId,
+        room_id,
+        score_home,
+        score_away,
+        paid: false
+      });
+    }
+
+    res.json({ success: true, data: prediction, message: existingPrediction ? 'Predicción actualizada' : 'Predicción guardada' });
+  } catch (error) {
+    console.error('Error en /player/prediction:', error);
+    res.status(500).json({ success: false, message: 'Error al guardar predicción' });
   }
 });
 
