@@ -323,4 +323,190 @@ router.post('/player/prediction', async (req, res) => {
   }
 });
 
+// ===== LIVE ROOM =====
+router.get('/player/live-room/:roomId', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { roomId } = req.params;
+
+    console.log("🔍 Cargando sala en vivo:", roomId, "para usuario:", userId);
+
+    if (!roomId || roomId === 'undefined') {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de sala inválido'
+      });
+    }
+
+    const room = await Room.findByPk(roomId, {
+      include: [
+        {
+          model: User,
+          as: 'bar',
+          attributes: ['id', 'name', 'bar_name']
+        }
+      ],
+      attributes: [
+        'id',
+        'name',
+        'team_home',
+        'team_away',
+        'match_date',
+        'status',
+        'total_pool'
+      ]
+    });
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sala no encontrada'
+      });
+    }
+
+    // Marcador provisional por ahora
+    const currentScoreHome = 0;
+    const currentScoreAway = 0;
+    const currentMinute = 0;
+    const currentPhase = 'Sin iniciar';
+
+    // Predicción del usuario actual
+    const userPrediction = await Prediction.findOne({
+      where: {
+        user_id: userId,
+        room_id: roomId
+      },
+      attributes: ['id', 'score_home', 'score_away', 'paid', 'createdAt']
+    });
+
+    // Todas las predicciones de la sala para ranking
+    const predictions = await Prediction.findAll({
+      where: { room_id: roomId },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name']
+        }
+      ],
+      attributes: [
+        'id',
+        'user_id',
+        'room_id',
+        'score_home',
+        'score_away',
+        'paid',
+        'createdAt'
+      ]
+    });
+
+    const getOutcome = (home, away) => {
+      if (home > away) return 'HOME';
+      if (home < away) return 'AWAY';
+      return 'DRAW';
+    };
+
+    const currentOutcome = getOutcome(currentScoreHome, currentScoreAway);
+
+    const rankingBase = predictions.map((prediction) => {
+      const predHome = Number(prediction.score_home);
+      const predAway = Number(prediction.score_away);
+
+      const distance =
+        Math.abs(predHome - currentScoreHome) +
+        Math.abs(predAway - currentScoreAway);
+
+      const predictionOutcome = getOutcome(predHome, predAway);
+      const sameOutcome = predictionOutcome === currentOutcome ? 1 : 0;
+
+      const exactHome = predHome === currentScoreHome ? 1 : 0;
+      const exactAway = predAway === currentScoreAway ? 1 : 0;
+      const exactGoalsHits = exactHome + exactAway;
+
+      return {
+        id: prediction.id,
+        user_id: prediction.user_id,
+        user_name: prediction.user?.name || 'Jugador',
+        score_home: predHome,
+        score_away: predAway,
+        prediction: `${predHome} x ${predAway}`,
+        paid: prediction.paid,
+        distance,
+        sameOutcome,
+        exactGoalsHits,
+        createdAt: prediction.createdAt,
+        is_user: prediction.user_id === userId
+      };
+    });
+
+    rankingBase.sort((a, b) => {
+      if (a.distance !== b.distance) return a.distance - b.distance;
+      if (a.sameOutcome !== b.sameOutcome) return b.sameOutcome - a.sameOutcome;
+      if (a.exactGoalsHits !== b.exactGoalsHits) return b.exactGoalsHits - a.exactGoalsHits;
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    });
+
+    const ranking = rankingBase.map((item, index) => ({
+      position: index + 1,
+      user_id: item.user_id,
+      user_name: item.user_name,
+      score_home: item.score_home,
+      score_away: item.score_away,
+      prediction: item.prediction,
+      distance: item.distance,
+      is_user: item.is_user,
+      paid: item.paid
+    }));
+
+    const userRanking = ranking.find((item) => item.is_user) || null;
+
+    return res.json({
+      success: true,
+      data: {
+        room: {
+          id: room.id,
+          name: room.name,
+          team_home: room.team_home,
+          team_away: room.team_away,
+          match_date: room.match_date,
+          status: room.status,
+          total_pool: room.total_pool,
+          bar: room.bar
+            ? {
+                id: room.bar.id,
+                name: room.bar.name,
+                bar_name: room.bar.bar_name
+              }
+            : null,
+          current_score_home: currentScoreHome,
+          current_score_away: currentScoreAway,
+          current_minute: currentMinute,
+          current_phase: currentPhase
+        },
+        user_prediction: userPrediction
+          ? {
+              id: userPrediction.id,
+              score_home: Number(userPrediction.score_home),
+              score_away: Number(userPrediction.score_away),
+              paid: userPrediction.paid
+            }
+          : null,
+        user_ranking: userRanking
+          ? {
+              position: userRanking.position,
+              total_players: ranking.length
+            }
+          : null,
+        ranking
+      }
+    });
+  } catch (error) {
+    console.error('Error en GET /player/live-room/:roomId:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error al obtener la sala en vivo'
+    });
+  }
+});
+
 module.exports = router;
