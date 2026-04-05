@@ -5,8 +5,6 @@ const { Op } = require("sequelize");
 // Obtener partidos activos (en curso O próximos)
 exports.getLiveMatches = async (req, res) => {
   try {
-    const now = new Date();
-
     // Buscar partidos activos (status = 'active')
     // Ordenar por fecha (los que están en curso primero, luego los próximos)
     const matches = await Room.findAll({
