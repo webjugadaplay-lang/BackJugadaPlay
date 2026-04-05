@@ -2,13 +2,15 @@
 const { Room, User, Prediction } = require("../models");
 const { Op } = require("sequelize");
 
+// Obtener partidos activos (en curso O próximos)
 exports.getLiveMatches = async (req, res) => {
   try {
     const now = new Date();
 
+    // Buscar partidos activos (status = 'active')
+    // Ordenar por fecha (los que están en curso primero, luego los próximos)
     const matches = await Room.findAll({
       where: {
-        match_date: { [Op.lte]: now },
         status: "active",
       },
       include: [
@@ -18,12 +20,25 @@ exports.getLiveMatches = async (req, res) => {
           attributes: ["id", "name", "bar_name"],
         },
       ],
-      order: [["match_date", "DESC"]],
+      order: [["match_date", "ASC"]],
     });
+
+    // Transformar los datos para el frontend
+    const formattedMatches = matches.map(match => ({
+      id: match.id,
+      name: match.name,
+      team_home: match.team_home,
+      team_away: match.team_away,
+      match_date: match.match_date,
+      current_score_home: match.current_score_home || 0,
+      current_score_away: match.current_score_away || 0,
+      status: match.status,
+      bar: match.bar,
+    }));
 
     return res.json({
       success: true,
-      data: matches,
+      data: formattedMatches,
     });
   } catch (error) {
     console.error("Error al obtener partidos activos:", error);
@@ -34,6 +49,7 @@ exports.getLiveMatches = async (req, res) => {
   }
 };
 
+// Actualizar marcador en vivo
 exports.updateLiveScore = async (req, res) => {
   try {
     const { roomId } = req.params;
@@ -64,9 +80,6 @@ exports.updateLiveScore = async (req, res) => {
     room.current_score_away = Number(current_score_away);
     await room.save();
 
-    // Aquí puedes recalcular ranking en vivo si tienes lógica montada
-    // await recalculateLiveRanking(room.id);
-
     return res.json({
       success: true,
       message: "Marcador actualizado correctamente",
@@ -81,12 +94,13 @@ exports.updateLiveScore = async (req, res) => {
   }
 };
 
+// Actualizar estado de la sala
 exports.updateRoomStatus = async (req, res) => {
   try {
     const { roomId } = req.params;
     const { status } = req.body;
 
-    const validStatuses = ["pending", "active", "finished", "cancelled"];
+    const validStatuses = ["active", "closed", "finished"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -105,9 +119,10 @@ exports.updateRoomStatus = async (req, res) => {
 
     room.status = status;
 
+    // Si se finaliza el partido, guardar el resultado final
     if (status === "finished") {
-      room.result_score_home = room.current_score_home;
-      room.result_score_away = room.current_score_away;
+      room.result_score_home = room.current_score_home || 0;
+      room.result_score_away = room.current_score_away || 0;
     }
 
     await room.save();

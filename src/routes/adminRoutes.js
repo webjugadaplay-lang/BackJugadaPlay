@@ -4,8 +4,12 @@ const router = express.Router();
 const adminController = require("../controllers/adminController");
 const { verifyToken, requireAdmin } = require("../middlewares/authMiddleware");
 
-router.get("/live-matches", verifyToken, requireAdmin, adminController.getLiveMatches);
-router.patch("/rooms/:roomId/score", verifyToken, requireAdmin, adminController.updateLiveScore);
-router.patch("/rooms/:roomId/status", verifyToken, requireAdmin, adminController.updateRoomStatus);
+// Todas las rutas requieren autenticación y rol de administrador
+router.use(verifyToken);
+router.use(requireAdmin);
+
+router.get("/live-matches", adminController.getLiveMatches);
+router.patch("/rooms/:roomId/score", adminController.updateLiveScore);
+router.patch("/rooms/:roomId/status", adminController.updateRoomStatus);
 
 module.exports = router;
