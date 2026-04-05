@@ -1,12 +1,12 @@
 const jwt = require('jsonwebtoken');
 
-const verifyToken = (req, res, next) => {
+module.exports = (req, res, next) => {
   const authHeader = req.headers.authorization;
   
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, message: 'No autorizado' });
+  if (!authHeader) {
+    return res.status(401).json({ message: 'No autorizado, token no proporcionado' });
   }
-  
+
   const token = authHeader.split(' ')[1];
   
   try {
@@ -14,15 +14,6 @@ const verifyToken = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (error) {
-    return res.status(401).json({ success: false, message: 'Token inválido' });
+    return res.status(401).json({ message: 'Token inválido o expirado' });
   }
 };
-
-const requireAdmin = (req, res, next) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol de administrador.' });
-  }
-  next();
-};
-
-module.exports = { verifyToken, requireAdmin };
