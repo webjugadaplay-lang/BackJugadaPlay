@@ -1,6 +1,8 @@
 // controllers/adminController.js
-const { Room, User, Prediction } = require("../models");
-const { Op } = require("sequelize");
+const Room = require('../models/Room');
+const User = require('../models/User');
+const Prediction = require('../models/Prediction');
+const { Op } = require('sequelize');
 
 // Obtener partidos activos (en curso O próximos)
 exports.getLiveMatches = async (req, res) => {
