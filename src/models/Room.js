@@ -86,3 +86,5 @@ module.exports = (sequelize, DataTypes) => {
 
   return Room;
 };
+
+module.exports = Room;
