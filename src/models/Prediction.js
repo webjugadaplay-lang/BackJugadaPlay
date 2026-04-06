@@ -35,7 +35,7 @@ const Prediction = sequelize.define('Prediction', {
 // Asociaciones
 Prediction.associate = (models) => {
   Prediction.belongsTo(models.Room, { foreignKey: 'room_id', as: 'room' });
-  Prediction.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
+  Prediction.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' }); // <- alias 'user'
 };
 
 module.exports = Prediction;
