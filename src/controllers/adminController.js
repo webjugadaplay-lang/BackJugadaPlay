@@ -4,31 +4,54 @@ const User = require('../models/User');
 const Prediction = require('../models/Prediction');
 const { Op } = require('sequelize');
 
-// Obtener partidos activos (en curso O próximos)
+// Obtener partidos activos (status = 'active')
 exports.getLiveMatches = async (req, res) => {
   try {
     console.log("🔍 getLiveMatches - Iniciando búsqueda...");
 
+    // Obtener partidos activos sin incluir la relación (para evitar error de alias)
     const matches = await Room.findAll({
       where: {
         status: "active",
       },
-      include: [
-        {
-          model: User,
-          as: "bar",
-          attributes: ["id", "name", "bar_name"],
-        },
-      ],
       order: [["match_date", "ASC"]],
     });
 
     console.log(`📦 Partidos encontrados: ${matches.length}`);
-    console.log("📦 Datos:", JSON.stringify(matches, null, 2));
+
+    // Obtener los datos del bar para cada partido manualmente
+    const matchesWithBar = [];
+    for (const match of matches) {
+      let barData = null;
+      if (match.bar_id) {
+        const bar = await User.findByPk(match.bar_id, {
+          attributes: ["id", "name", "bar_name"]
+        });
+        if (bar) {
+          barData = {
+            id: bar.id,
+            name: bar.name,
+            bar_name: bar.bar_name
+          };
+        }
+      }
+      
+      matchesWithBar.push({
+        id: match.id,
+        name: match.name,
+        team_home: match.team_home,
+        team_away: match.team_away,
+        match_date: match.match_date,
+        current_score_home: match.current_score_home || 0,
+        current_score_away: match.current_score_away || 0,
+        status: match.status,
+        bar: barData,
+      });
+    }
 
     return res.json({
       success: true,
-      data: matches,
+      data: matchesWithBar,
     });
   } catch (error) {
     console.error("❌ Error al obtener partidos activos:", error);
@@ -90,7 +113,7 @@ exports.updateRoomStatus = async (req, res) => {
     const { roomId } = req.params;
     const { status } = req.body;
 
-    const validStatuses = ["active", "closed", "finished"];
+    const validStatuses = ["pending", "active", "finished", "cancelled"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -108,13 +131,6 @@ exports.updateRoomStatus = async (req, res) => {
     }
 
     room.status = status;
-
-    // Si se finaliza el partido, guardar el resultado final
-    if (status === "finished") {
-      room.result_score_home = room.current_score_home || 0;
-      room.result_score_away = room.current_score_away || 0;
-    }
-
     await room.save();
 
     return res.json({
