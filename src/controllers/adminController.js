@@ -7,8 +7,8 @@ const { Op } = require('sequelize');
 // Obtener partidos activos (en curso O próximos)
 exports.getLiveMatches = async (req, res) => {
   try {
-    // Buscar partidos activos (status = 'active')
-    // Ordenar por fecha (los que están en curso primero, luego los próximos)
+    console.log("🔍 getLiveMatches - Iniciando búsqueda...");
+
     const matches = await Room.findAll({
       where: {
         status: "active",
@@ -23,25 +23,15 @@ exports.getLiveMatches = async (req, res) => {
       order: [["match_date", "ASC"]],
     });
 
-    // Transformar los datos para el frontend
-    const formattedMatches = matches.map(match => ({
-      id: match.id,
-      name: match.name,
-      team_home: match.team_home,
-      team_away: match.team_away,
-      match_date: match.match_date,
-      current_score_home: match.current_score_home || 0,
-      current_score_away: match.current_score_away || 0,
-      status: match.status,
-      bar: match.bar,
-    }));
+    console.log(`📦 Partidos encontrados: ${matches.length}`);
+    console.log("📦 Datos:", JSON.stringify(matches, null, 2));
 
     return res.json({
       success: true,
-      data: formattedMatches,
+      data: matches,
     });
   } catch (error) {
-    console.error("Error al obtener partidos activos:", error);
+    console.error("❌ Error al obtener partidos activos:", error);
     return res.status(500).json({
       success: false,
       message: "Error al obtener partidos activos",
