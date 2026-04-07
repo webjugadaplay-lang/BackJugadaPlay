@@ -324,6 +324,7 @@ router.post('/player/prediction', async (req, res) => {
 });
 
 // ===== LIVE ROOM =====
+// Obtener sala en vivo con ranking pre-calculado
 router.get('/player/live-room/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
@@ -338,51 +339,23 @@ router.get('/player/live-room/:roomId', async (req, res) => {
       });
     }
     
-    // Asegurar valores por defecto
-    const totalPool = parseFloat(room.total_pool) || 0;
-    const entryFee = parseFloat(room.entry_fee) || 0;
+    // Usar ranking pre-calculado si existe, sino calcularlo
+    let ranking = room.live_ranking || [];
     
-    // Obtener el bar manualmente
-    let barData = null;
-    if (room.bar_id) {
-      const bar = await User.findByPk(room.bar_id, {
-        attributes: ['id', 'name', 'bar_name']
-      });
-      if (bar) {
-        barData = {
-          id: bar.id,
-          name: bar.name,
-          bar_name: bar.bar_name
-        };
-      }
+    if (ranking.length === 0) {
+      ranking = await calculateLiveRanking(roomId, room.current_score_home, room.current_score_away);
     }
     
-    // Obtener la predicción del usuario
-    const prediction = await Prediction.findOne({
+    // Encontrar posición del usuario
+    const userPosition = ranking.findIndex(r => r.user_id === userId);
+    
+    // Obtener predicción del usuario
+    const userPrediction = await Prediction.findOne({
       where: {
         user_id: userId,
         room_id: roomId
       }
     });
-    
-    // Obtener todas las predicciones de la sala
-    const allPredictions = await Prediction.findAll({
-      where: { room_id: roomId }
-    });
-    
-    // Ranking manual
-    const ranking = [];
-    for (const pred of allPredictions) {
-      const user = await User.findByPk(pred.user_id, {
-        attributes: ['id', 'name', 'player_nickname']
-      });
-      ranking.push({
-        userId: pred.user_id,
-        name: user?.player_nickname || user?.name || 'Jugador',
-        prediction: `${pred.score_home} x ${pred.score_away}`,
-        isUser: pred.user_id === userId
-      });
-    }
     
     const responseData = {
       success: true,
@@ -391,17 +364,24 @@ router.get('/player/live-room/:roomId', async (req, res) => {
         team_home: room.team_home,
         team_away: room.team_away,
         match_date: room.match_date,
-        current_score_home: room.current_score_home || 0,
-        current_score_away: room.current_score_away || 0,
+        current_score_home: room.current_score_home,
+        current_score_away: room.current_score_away,
         status: room.status,
-        entry_fee: entryFee,
-        total_pool: totalPool,
-        bar: barData,
-        userPrediction: prediction ? {
-          score_home: prediction.score_home,
-          score_away: prediction.score_away
+        entry_fee: room.entry_fee,
+        total_pool: room.total_pool,
+        ranking: ranking.map(r => ({
+          userId: r.user_id,
+          name: r.user_name,
+          prediction: `${r.score_home} x ${r.score_away}`,
+          isUser: r.user_id === userId,
+          position: r.position
+        })),
+        userPrediction: userPrediction ? {
+          score_home: userPrediction.score_home,
+          score_away: userPrediction.score_away
         } : null,
-        ranking: ranking
+        userPosition: userPosition + 1,
+        totalPlayers: ranking.length
       }
     };
     
@@ -411,8 +391,7 @@ router.get('/player/live-room/:roomId', async (req, res) => {
     console.error('Error en GET /player/live-room/:roomId:', error);
     return res.status(500).json({
       success: false,
-      message: 'Error al cargar la sala en vivo',
-      error: error.message
+      message: 'Error al cargar la sala en vivo'
     });
   }
 });
