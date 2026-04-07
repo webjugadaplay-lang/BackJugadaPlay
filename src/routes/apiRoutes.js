@@ -324,6 +324,78 @@ router.post('/player/prediction', async (req, res) => {
 });
 
 // ===== LIVE ROOM =====
+// ===== FUNCIÓN AUXILIAR PARA CALCULAR RANKING =====
+async function calculateLiveRanking(roomId, realHome, realAway) {
+  const predictions = await Prediction.findAll({
+    where: { room_id: roomId },
+    include: [{
+      model: User,
+      as: 'user',
+      attributes: ['id', 'name', 'player_nickname']
+    }]
+  });
+
+  const ranking = predictions.map(pred => {
+    const errorHome = Math.abs(pred.score_home - realHome);
+    const errorAway = Math.abs(pred.score_away - realAway);
+    const totalError = errorHome + errorAway;
+    
+    return {
+      user_id: pred.user_id,
+      user_name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
+      score_home: pred.score_home,
+      score_away: pred.score_away,
+      error_home: errorHome,
+      error_away: errorAway,
+      total_error: totalError
+    };
+  });
+
+  ranking.sort((a, b) => a.total_error - b.total_error);
+  
+  return ranking.map((item, idx) => ({
+    ...item,
+    position: idx + 1
+  }));
+}
+
+// ===== LIVE ROOM =====
+// Obtener sala en vivo con ranking pre-calculado
+// ===== FUNCIÓN AUXILIAR PARA CALCULAR RANKING =====
+async function calculateLiveRanking(roomId, realHome, realAway) {
+  const predictions = await Prediction.findAll({
+    where: { room_id: roomId },
+    include: [{
+      model: User,
+      as: 'user',
+      attributes: ['id', 'name', 'player_nickname']
+    }]
+  });
+
+  const ranking = predictions.map(pred => {
+    const errorHome = Math.abs(pred.score_home - realHome);
+    const errorAway = Math.abs(pred.score_away - realAway);
+    const totalError = errorHome + errorAway;
+    
+    return {
+      user_id: pred.user_id,
+      user_name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
+      score_home: pred.score_home,
+      score_away: pred.score_away,
+      error_home: errorHome,
+      error_away: errorAway,
+      total_error: totalError
+    };
+  });
+
+  ranking.sort((a, b) => a.total_error - b.total_error);
+  
+  return ranking.map((item, idx) => ({
+    ...item,
+    position: idx + 1
+  }));
+}
+
 // Obtener sala en vivo con ranking pre-calculado
 router.get('/player/live-room/:roomId', async (req, res) => {
   try {
