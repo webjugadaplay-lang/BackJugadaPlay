@@ -324,42 +324,7 @@ router.post('/player/prediction', async (req, res) => {
 });
 
 // ===== LIVE ROOM =====
-// ===== FUNCIÓN AUXILIAR PARA CALCULAR RANKING =====
-async function calculateLiveRanking(roomId, realHome, realAway) {
-  const predictions = await Prediction.findAll({
-    where: { room_id: roomId },
-    include: [{
-      model: User,
-      as: 'user',
-      attributes: ['id', 'name', 'player_nickname']
-    }]
-  });
-
-  const ranking = predictions.map(pred => {
-    const errorHome = Math.abs(pred.score_home - realHome);
-    const errorAway = Math.abs(pred.score_away - realAway);
-    const totalError = errorHome + errorAway;
-
-    return {
-      user_id: pred.user_id,
-      user_name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
-      score_home: pred.score_home,
-      score_away: pred.score_away,
-      error_home: errorHome,
-      error_away: errorAway,
-      total_error: totalError
-    };
-  });
-
-  ranking.sort((a, b) => a.total_error - b.total_error);
-
-  return ranking.map((item, idx) => ({
-    ...item,
-    position: idx + 1
-  }));
-}
-
-// ===== LIVE ROOM =====
+// ===== FUNCIÓN AUXILIAR PARA CALCULAR RANKING CON EMOJIS =====
 // ===== FUNCIÓN AUXILIAR PARA CALCULAR RANKING CON EMOJIS =====
 async function calculateLiveRanking(roomId, realHome, realAway) {
   const predictions = await Prediction.findAll({
@@ -396,13 +361,14 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
     const { emoji, status } = getEmojiAndStatus(totalError, pred.score_home, pred.score_away, realHome, realAway);
     
     return {
-      userId: pred.user_id,
-      name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
-      prediction: `${pred.score_home} x ${pred.score_away}`,
+      user_id: pred.user_id,
+      user_name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
+      score_home: pred.score_home,
+      score_away: pred.score_away,
       total_error: totalError,
       emoji: emoji,
       status: status,
-      position: 0 // temporal
+      position: 0
     };
   });
 
@@ -464,7 +430,83 @@ router.get('/player/live-room/:roomId', async (req, res) => {
           name: r.user_name,
           prediction: `${r.score_home} x ${r.score_away}`,
           isUser: r.user_id === userId,
-          position: r.position
+          position: r.position,
+          emoji: r.emoji || '⚽',
+          status: r.status || ''
+        })),
+        userPrediction: userPrediction ? {
+          score_home: userPrediction.score_home,
+          score_away: userPrediction.score_away
+        } : null,
+        userPosition: userPosition + 1,
+        totalPlayers: ranking.length
+      }
+    };
+
+    return res.json(responseData);
+
+  } catch (error) {
+    console.error('Error en GET /player/live-room/:roomId:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error al cargar la sala en vivo'
+    });
+  }
+});
+
+// Obtener sala en vivo con ranking pre-calculado
+router.get('/player/live-room/:roomId', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const userId = req.user.id;
+
+    const room = await Room.findByPk(roomId);
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sala no encontrada'
+      });
+    }
+
+    // Usar ranking pre-calculado si existe, sino calcularlo
+    let ranking = room.live_ranking || [];
+
+    if (ranking.length === 0) {
+      ranking = await calculateLiveRanking(roomId, room.current_score_home, room.current_score_away);
+    }
+
+    // Encontrar posición del usuario
+    const userPosition = ranking.findIndex(r => r.user_id === userId);
+
+    // Obtener predicción del usuario
+    const userPrediction = await Prediction.findOne({
+      where: {
+        user_id: userId,
+        room_id: roomId
+      }
+    });
+
+    const responseData = {
+      success: true,
+      data: {
+        id: room.id,
+        team_home: room.team_home,
+        team_away: room.team_away,
+        match_date: room.match_date,
+        current_score_home: room.current_score_home,
+        current_score_away: room.current_score_away,
+        status: room.status,
+        entry_fee: room.entry_fee,
+        total_pool: room.total_pool,
+        ranking: ranking.map(r => ({
+          userId: r.user_id,
+          name: r.user_name,
+          prediction: `${r.score_home} x ${r.score_away}`,
+          isUser: r.user_id === userId,
+          position: r.position,
+          emoji: r.emoji || '⚽',     // ← AGREGAR ESTO
+          status: r.status || ''      // ← AGREGAR ESTO
         })),
         userPrediction: userPrediction ? {
           score_home: userPrediction.score_home,
