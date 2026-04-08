@@ -339,7 +339,7 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
     const errorHome = Math.abs(pred.score_home - realHome);
     const errorAway = Math.abs(pred.score_away - realAway);
     const totalError = errorHome + errorAway;
-    
+
     return {
       user_id: pred.user_id,
       user_name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
@@ -352,7 +352,7 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
   });
 
   ranking.sort((a, b) => a.total_error - b.total_error);
-  
+
   return ranking.map((item, idx) => ({
     ...item,
     position: idx + 1
@@ -371,8 +371,16 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
     }]
   });
 
-  // Función para obtener emoji según error total
-  function getEmojiAndStatus(totalError) {
+  function getEmojiAndStatus(totalError, predHome, predAway, realHome, realAway) {
+    const realWinner = realHome > realAway ? 'home' : (realAway > realHome ? 'away' : 'draw');
+    const predWinner = predHome > predAway ? 'home' : (predAway > predHome ? 'away' : 'draw');
+
+    // Si el usuario ya no puede acertar el ganador
+    if (realWinner !== 'draw' && predWinner !== realWinner) {
+      return { emoji: '🥶', status: 'Muerto' };
+    }
+
+    // Si puede acertar el ganador, evaluar por error
     if (totalError === 0) return { emoji: '🥳', status: 'Excelente' };
     if (totalError === 1) return { emoji: '😁', status: 'Bien' };
     if (totalError === 2) return { emoji: '🥲', status: 'Regular' };
@@ -385,15 +393,13 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
     const errorHome = Math.abs(pred.score_home - realHome);
     const errorAway = Math.abs(pred.score_away - realAway);
     const totalError = errorHome + errorAway;
-    const { emoji, status } = getEmojiAndStatus(totalError);
-    
+    const { emoji, status } = getEmojiAndStatus(totalError, pred.score_home, pred.score_away, realHome, realAway);
+
     return {
       user_id: pred.user_id,
       user_name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
       score_home: pred.score_home,
       score_away: pred.score_away,
-      error_home: errorHome,
-      error_away: errorAway,
       total_error: totalError,
       emoji: emoji,
       status: status
@@ -401,10 +407,15 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
   });
 
   ranking.sort((a, b) => a.total_error - b.total_error);
-  
+
   return ranking.map((item, idx) => ({
-    ...item,
-    position: idx + 1
+    userId: item.user_id,
+    name: item.name,
+    prediction: `${item.score_home} x ${item.score_away}`,
+    isUser: false,
+    position: idx + 1,
+    emoji: item.emoji,
+    status: item.status
   }));
 }
 
@@ -413,26 +424,26 @@ router.get('/player/live-room/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
     const userId = req.user.id;
-    
+
     const room = await Room.findByPk(roomId);
-    
+
     if (!room) {
       return res.status(404).json({
         success: false,
         message: 'Sala no encontrada'
       });
     }
-    
+
     // Usar ranking pre-calculado si existe, sino calcularlo
     let ranking = room.live_ranking || [];
-    
+
     if (ranking.length === 0) {
       ranking = await calculateLiveRanking(roomId, room.current_score_home, room.current_score_away);
     }
-    
+
     // Encontrar posición del usuario
     const userPosition = ranking.findIndex(r => r.user_id === userId);
-    
+
     // Obtener predicción del usuario
     const userPrediction = await Prediction.findOne({
       where: {
@@ -440,7 +451,7 @@ router.get('/player/live-room/:roomId', async (req, res) => {
         room_id: roomId
       }
     });
-    
+
     const responseData = {
       success: true,
       data: {
@@ -468,9 +479,9 @@ router.get('/player/live-room/:roomId', async (req, res) => {
         totalPlayers: ranking.length
       }
     };
-    
+
     return res.json(responseData);
-    
+
   } catch (error) {
     console.error('Error en GET /player/live-room/:roomId:', error);
     return res.status(500).json({
