@@ -374,12 +374,12 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
   function getEmojiAndStatus(totalError, predHome, predAway, realHome, realAway) {
     const realWinner = realHome > realAway ? 'home' : (realAway > realHome ? 'away' : 'draw');
     const predWinner = predHome > predAway ? 'home' : (predAway > predHome ? 'away' : 'draw');
-
+    
     // Si el usuario ya no puede acertar el ganador
     if (realWinner !== 'draw' && predWinner !== realWinner) {
       return { emoji: '🥶', status: 'Muerto' };
     }
-
+    
     // Si puede acertar el ganador, evaluar por error
     if (totalError === 0) return { emoji: '🥳', status: 'Excelente' };
     if (totalError === 1) return { emoji: '😁', status: 'Bien' };
@@ -394,28 +394,23 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
     const errorAway = Math.abs(pred.score_away - realAway);
     const totalError = errorHome + errorAway;
     const { emoji, status } = getEmojiAndStatus(totalError, pred.score_home, pred.score_away, realHome, realAway);
-
+    
     return {
-      user_id: pred.user_id,
-      user_name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
-      score_home: pred.score_home,
-      score_away: pred.score_away,
+      userId: pred.user_id,
+      name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
+      prediction: `${pred.score_home} x ${pred.score_away}`,
       total_error: totalError,
       emoji: emoji,
-      status: status
+      status: status,
+      position: 0 // temporal
     };
   });
 
   ranking.sort((a, b) => a.total_error - b.total_error);
-
+  
   return ranking.map((item, idx) => ({
-    userId: item.user_id,
-    name: item.name,
-    prediction: `${item.score_home} x ${item.score_away}`,
-    isUser: false,
-    position: idx + 1,
-    emoji: item.emoji,
-    status: item.status
+    ...item,
+    position: idx + 1
   }));
 }
 
