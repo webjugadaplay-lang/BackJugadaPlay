@@ -156,8 +156,8 @@ exports.calculateWinners = async (req, res) => {
     
     const realHome = room.current_score_home || 0;
     const realAway = room.current_score_away || 0;
-    const realWinner = realHome > realAway ? 'home' : (realAway > realHome ? 'away' : 'draw');
     
+    // Obtener todas las predicciones
     const predictions = await Prediction.findAll({
       where: { room_id: roomId },
       include: [{
@@ -167,29 +167,53 @@ exports.calculateWinners = async (req, res) => {
       }]
     });
     
-    // Filtrar por acierto del ganador
-    const candidates = predictions.filter(pred => {
-      const predWinner = pred.score_home > pred.score_away ? 'home' : 
-                         (pred.score_away > pred.score_home ? 'away' : 'draw');
-      return predWinner === realWinner;
+    // Calcular error total para cada predicción
+    const predictionsWithError = predictions.map(pred => {
+      const errorHome = Math.abs(pred.score_home - realHome);
+      const errorAway = Math.abs(pred.score_away - realAway);
+      const totalError = errorHome + errorAway;
+      
+      return {
+        user_id: pred.user_id,
+        user_name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
+        score_home: pred.score_home,
+        score_away: pred.score_away,
+        error_home: errorHome,
+        error_away: errorAway,
+        total_error: totalError
+      };
     });
     
-    if (candidates.length === 0) {
-      await room.update({ winners_calculated: true, winners_count: 0, winners_list: [] });
-      return res.json({ success: true, message: 'No hubo ganadores', data: { winners: [], total_prize: 0 } });
+    // Ordenar por error total (menor es mejor)
+    predictionsWithError.sort((a, b) => a.total_error - b.total_error);
+    
+    // Verificar si hay algún ganador con error 0
+    const minError = predictionsWithError[0]?.total_error;
+    const hasWinner = minError === 0;
+    
+    if (!hasWinner) {
+      // Nadie acertó el marcador exacto → No hay ganadores
+      await room.update({
+        winners_calculated: true,
+        winners_count: 0,
+        winners_list: [],
+        final_prize_distributed: 0,
+        prize_accumulated: (room.total_pool || 0) * 0.7  // Acumular para próximo evento
+      });
+      
+      return res.json({
+        success: true,
+        message: 'No hubo ganadores (nadie acertó el marcador exacto)',
+        data: {
+          winners: [],
+          total_prize: 0,
+          message: 'El pozo se acumula para el próximo evento'
+        }
+      });
     }
     
-    const candidatesWithError = candidates.map(pred => ({
-      user_id: pred.user_id,
-      user_name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
-      score_home: pred.score_home,
-      score_away: pred.score_away,
-      total_error: Math.abs(pred.score_home - realHome) + Math.abs(pred.score_away - realAway)
-    }));
-    
-    candidatesWithError.sort((a, b) => a.total_error - b.total_error);
-    const minError = candidatesWithError[0].total_error;
-    const winners = candidatesWithError.filter(c => c.total_error === minError);
+    // Todos los que tienen error 0 son ganadores
+    const winners = predictionsWithError.filter(p => p.total_error === 0);
     
     const totalPrize = parseFloat(room.total_pool) * 0.7;
     const prizePerWinner = totalPrize / winners.length;
@@ -197,15 +221,31 @@ exports.calculateWinners = async (req, res) => {
     await room.update({
       winners_calculated: true,
       winners_count: winners.length,
-      winners_list: winners.map(w => ({ user_id: w.user_id, user_name: w.user_name, prize: prizePerWinner })),
+      winners_list: winners.map(w => ({
+        user_id: w.user_id,
+        user_name: w.user_name,
+        prediction: `${w.score_home} x ${w.score_away}`,
+        prize: prizePerWinner
+      })),
       final_prize_distributed: totalPrize
     });
     
     return res.json({
       success: true,
       message: `${winners.length} ganador(es) encontrado(s)`,
-      data: { winners, total_prize: totalPrize, prize_per_winner: prizePerWinner }
+      data: {
+        winners: winners.map(w => ({
+          user_id: w.user_id,
+          user_name: w.user_name,
+          prediction: `${w.score_home} x ${w.score_away}`,
+          error: w.total_error,
+          prize: prizePerWinner
+        })),
+        total_prize: totalPrize,
+        prize_per_winner: prizePerWinner
+      }
     });
+    
   } catch (error) {
     console.error('Error al calcular ganadores:', error);
     return res.status(500).json({ success: false, message: 'Error al calcular ganadores' });
