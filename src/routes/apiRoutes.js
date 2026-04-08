@@ -360,8 +360,7 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
 }
 
 // ===== LIVE ROOM =====
-// Obtener sala en vivo con ranking pre-calculado
-// ===== FUNCIÓN AUXILIAR PARA CALCULAR RANKING =====
+// ===== FUNCIÓN AUXILIAR PARA CALCULAR RANKING CON EMOJIS =====
 async function calculateLiveRanking(roomId, realHome, realAway) {
   const predictions = await Prediction.findAll({
     where: { room_id: roomId },
@@ -372,10 +371,21 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
     }]
   });
 
+  // Función para obtener emoji según error total
+  function getEmojiAndStatus(totalError) {
+    if (totalError === 0) return { emoji: '🥳', status: 'Excelente' };
+    if (totalError === 1) return { emoji: '😁', status: 'Bien' };
+    if (totalError === 2) return { emoji: '🥲', status: 'Regular' };
+    if (totalError === 3) return { emoji: '😐', status: 'Ni bien ni mal' };
+    if (totalError === 4) return { emoji: '😡', status: 'Mal' };
+    return { emoji: '🥶', status: 'Muerto' };
+  }
+
   const ranking = predictions.map(pred => {
     const errorHome = Math.abs(pred.score_home - realHome);
     const errorAway = Math.abs(pred.score_away - realAway);
     const totalError = errorHome + errorAway;
+    const { emoji, status } = getEmojiAndStatus(totalError);
     
     return {
       user_id: pred.user_id,
@@ -384,7 +394,9 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
       score_away: pred.score_away,
       error_home: errorHome,
       error_away: errorAway,
-      total_error: totalError
+      total_error: totalError,
+      emoji: emoji,
+      status: status
     };
   });
 
