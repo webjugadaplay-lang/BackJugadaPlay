@@ -80,7 +80,7 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
         name: user.name,
-        barName: "Blvck Coctails",
+        barName: "user.barName || null",
       },
     });
   } catch (error) {
