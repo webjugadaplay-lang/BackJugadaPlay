@@ -31,7 +31,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Sincronizar base de datos
-sequelize.sync({ alter: true })
+sequelize.sync()
   .then(async () => {
     console.log('Base de datos sincronizada');
 
