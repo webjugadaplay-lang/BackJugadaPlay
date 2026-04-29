@@ -72,12 +72,4 @@ User.prototype.validPassword = async function(password) {
   return await bcrypt.compare(password, this.password);
 };
 
-// Asociaciones (agregar después de la definición del modelo)
-User.associate = (models) => {
-  User.hasMany(models.Room, { foreignKey: 'bar_id' });
-  User.hasMany(models.Prediction, { foreignKey: 'user_id' });
-  User.hasMany(models.Payment, { foreignKey: 'user_id' });
-  User.hasMany(models.PasswordResetToken, { foreignKey: 'userId' });
-};
-
 module.exports = User;

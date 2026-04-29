@@ -12,24 +12,17 @@ const PasswordResetToken = sequelize.define('PasswordResetToken', {
     allowNull: false,
     unique: true,
   },
-  userId: {
+  user_id: {
     type: DataTypes.UUID,
     allowNull: false,
-    field: 'user_id',
-    references: {
-      model: 'users', // ← Cambiado de 'Users' a 'users' (minúscula)
-      key: 'id',
-    },
   },
-  expiresAt: {
+  expires_at: {
     type: DataTypes.DATE,
     allowNull: false,
-    field: 'expires_at',
   },
-  usedAt: {
+  used_at: {
     type: DataTypes.DATE,
     allowNull: true,
-    field: 'used_at',
   },
 }, {
   timestamps: true,

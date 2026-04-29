@@ -1,8 +1,7 @@
+const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const User = require('../models/User');
 const PasswordResetToken = require('../models/PasswordResetToken');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
-const crypto = require('crypto');
 
 // Generar token JWT
 const generateToken = (user) => {
@@ -100,7 +99,7 @@ exports.forgotPassword = async (req, res) => {
       return res.status(400).json({ message: 'Email es requerido' });
     }
 
-    // Buscar usuario por email (sin role específico)
+    // Buscar usuario por email
     const user = await User.findOne({ where: { email: email.toLowerCase() } });
 
     // Por seguridad, siempre respondemos igual aunque no exista
@@ -112,9 +111,9 @@ exports.forgotPassword = async (req, res) => {
 
       // Guardar token
       await PasswordResetToken.create({
-        userId: user.id,
+        user_id: user.id,
         token: hashedToken,
-        expiresAt: expiresAt
+        expires_at: expiresAt,
       });
 
       const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
