@@ -1,8 +1,8 @@
 const User = require('../models/User');
+const PasswordResetToken = require('../models/PasswordResetToken');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const PasswordResetToken = require('../models/PasswordResetToken');
 
 // Generar token JWT
 const generateToken = (user) => {
