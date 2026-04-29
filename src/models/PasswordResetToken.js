@@ -15,6 +15,10 @@ const PasswordResetToken = sequelize.define('PasswordResetToken', {
   user_id: {
     type: DataTypes.UUID,
     allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id',
+    },
   },
   expires_at: {
     type: DataTypes.DATE,
@@ -25,8 +29,6 @@ const PasswordResetToken = sequelize.define('PasswordResetToken', {
     allowNull: true,
   },
 }, {
-  timestamps: true,
   tableName: 'password_reset_tokens',
+  timestamps: true, // Esto hace que Sequelize espere las columnas createdAt y updatedAt
 });
-
-module.exports = PasswordResetToken;

@@ -11,7 +11,8 @@ const PasswordResetToken = require('./models/PasswordResetToken');
 const authRoutes = require('./routes/authRoutes');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+//const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 10000; // Render espera 10000 por defecto
 
 // Middlewares
 app.use(cors());
@@ -30,12 +31,12 @@ const startServer = async () => {
   try {
     await sequelize.authenticate();
     console.log('📦 Conectado a PostgreSQL en Render...');
-    
+
     // Sincronizar modelos (sin alter para evitar errores)
     await sequelize.sync();
     console.log('✅ Base de datos sincronizada');
-    
-    app.listen(PORT, () => {
+
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
     });
   } catch (error) {
