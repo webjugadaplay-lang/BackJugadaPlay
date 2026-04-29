@@ -102,32 +102,38 @@ exports.forgotPassword = async (req, res) => {
     // Buscar usuario por email
     const user = await User.findOne({ where: { email: email.toLowerCase() } });
 
-    // Por seguridad, siempre respondemos igual aunque no exista
-    if (user) {
-      // Generar token seguro
-      const resetToken = crypto.randomBytes(32).toString('hex');
-      const hashedToken = await bcrypt.hash(resetToken, 10);
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
-
-      // Guardar token
-      await PasswordResetToken.create({
-        user_id: user.id,
-        token: hashedToken,
-        expires_at: expiresAt,
+    // Verificar si el usuario NO existe
+    if (!user) {
+      return res.status(404).json({ 
+        message: 'Correo electrónico no registrado' 
       });
-
-      const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
-      
-      // TODO: Enviar email (por ahora solo log)
-      console.log('=== ENLACE DE RECUPERACIÓN ===');
-      console.log(`Email: ${email}`);
-      console.log(`Token: ${resetToken}`);
-      console.log(`Enlace: ${resetUrl}`);
-      console.log('==============================');
     }
 
+    // Si el usuario existe, generar token y enviar email
+    // Generar token seguro
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = await bcrypt.hash(resetToken, 10);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    // Guardar token
+    await PasswordResetToken.create({
+      user_id: user.id,
+      token: hashedToken,
+      expires_at: expiresAt,
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+    
+    // TODO: Enviar email (por ahora solo log)
+    console.log('=== ENLACE DE RECUPERACIÓN ===');
+    console.log(`Email: ${email}`);
+    console.log(`Token: ${resetToken}`);
+    console.log(`Enlace: ${resetUrl}`);
+    console.log('==============================');
+
+    // Respuesta específica para cuando el email existe
     return res.status(200).json({
-      message: 'Si el email está registrado, recibirás un enlace para recuperar tu contraseña.'
+      message: `Revisa el email ${email}, recibirás un enlace para recuperar tu contraseña.`
     });
 
   } catch (error) {
