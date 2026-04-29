@@ -34,6 +34,8 @@ const startServer = async () => {
 
     // Sincronizar modelos (sin alter para evitar errores)
     await sequelize.sync();
+    await User.sync();
+    await PasswordResetToken.sync();
     console.log('✅ Base de datos sincronizada');
 
     app.listen(PORT, '0.0.0.0', () => {
