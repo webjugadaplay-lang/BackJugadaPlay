@@ -77,6 +77,7 @@ User.associate = (models) => {
   User.hasMany(models.Room, { foreignKey: 'bar_id' });
   User.hasMany(models.Prediction, { foreignKey: 'user_id' });
   User.hasMany(models.Payment, { foreignKey: 'user_id' });
+  User.hasMany(models.PasswordResetToken, { foreignKey: 'userId' });
 };
 
 module.exports = User;
