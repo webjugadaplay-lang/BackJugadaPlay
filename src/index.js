@@ -49,4 +49,16 @@ const startServer = async () => {
   }
 };
 
+// Endpoint de diagnóstico (temporal)
+app.get('/diagnostic', (req, res) => {
+  const dns = require('dns');
+  dns.lookup('smtp.gmail.com', { family: 4 }, (err, address) => {
+    res.json({
+      smtpIpv4: address,
+      error: err?.message,
+      nodeOptions: process.env.NODE_OPTIONS
+    });
+  });
+});
+
 startServer();
