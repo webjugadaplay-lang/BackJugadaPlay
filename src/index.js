@@ -18,6 +18,8 @@ const PORT = process.env.PORT || 10000; // Render espera 10000 por defecto
 app.use(cors());
 app.use(express.json());
 
+app.use(express.static('public'));
+
 // Rutas
 app.use('/api/auth', authRoutes);
 
