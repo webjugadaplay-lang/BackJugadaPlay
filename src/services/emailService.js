@@ -1,20 +1,23 @@
 const nodemailer = require('nodemailer');
 
-// Configurar el transporte de correo forzando IPv4
+// Configurar el transporte de correo - Puerto 465 con SSL
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // true para 465, false para otros puertos
+  port: 465,
+  secure: true, // true para puerto 465
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  // Forzar IPv4
+  // Forzar IPv4 y timeouts
   family: 4,
-  // Timeouts más largos para Render
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
+  connectionTimeout: 30000,
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
+  // Configuración adicional de TLS
+  tls: {
+    rejectUnauthorized: false, // Solo para pruebas en Render
+  },
 });
 
 // Función para enviar correo de recuperación de contraseña
