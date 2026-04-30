@@ -1,12 +1,20 @@
 const nodemailer = require('nodemailer');
 
-// Configurar el transporte de correo
+// Configurar el transporte de correo forzando IPv4
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, // true para 465, false para otros puertos
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  // Forzar IPv4
+  family: 4,
+  // Timeouts más largos para Render
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
 });
 
 // Función para enviar correo de recuperación de contraseña
@@ -26,7 +34,7 @@ const sendPasswordResetEmail = async (toEmail, resetLink, userName = '') => {
         <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
           <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
             <div style="text-align: center; margin-bottom: 30px;">
-              <img src="https://backjugadaplay.onrender.com/logo.png" alt="JugadaPlay">
+              <h1 style="color: #FFD700; margin: 0;">JugadaPlay</h1>
             </div>
             <h2 style="color: #333; text-align: center;">¿Olvidaste tu contraseña?</h2>
             <p style="color: #555; font-size: 16px; line-height: 1.5;">
