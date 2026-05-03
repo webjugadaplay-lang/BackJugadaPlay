@@ -71,27 +71,44 @@ const validateCNPJ = (cnpj) => {
   return digit === parseInt(cnpj.charAt(13));
 };
 
-// Validar cédula colombiana
+// Validar cédula colombiana - VERSIÓN MÁS FLEXIBLE
 const validateColombianId = (cedula) => {
   cedula = cedula.replace(/\D/g, '');
+  
+  // Validar longitud (entre 7 y 10 dígitos)
   if (cedula.length < 7 || cedula.length > 10) return false;
+  
+  // No puede ser todos ceros
   if (/^0+$/.test(cedula)) return false;
   
-  const totalDigits = cedula.length;
-  let sum = 0;
-  
-  for (let i = 0; i < totalDigits - 1; i++) {
-    const digit = parseInt(cedula.charAt(i));
-    const position = totalDigits - i;
-    const factor = position < 3 ? position : position % 6 + 2;
-    sum += digit * factor;
+  // Para cédulas de 10 dígitos, validar dígito verificador (opcional)
+  // Si no pasa la validación del dígito, igual la aceptamos si es de 10 dígitos
+  if (cedula.length === 10) {
+    // Intentar validar dígito verificador
+    const totalDigits = cedula.length;
+    let sum = 0;
+    
+    for (let i = 0; i < totalDigits - 1; i++) {
+      const digit = parseInt(cedula.charAt(i));
+      const position = totalDigits - i;
+      const factor = position < 3 ? position : position % 6 + 2;
+      sum += digit * factor;
+    }
+    
+    const remainder = sum % 11;
+    const checkDigit = remainder === 0 ? 0 : 11 - remainder;
+    const lastDigit = parseInt(cedula.charAt(totalDigits - 1));
+    
+    // Si la validación falla, igual aceptamos (cédulas antiguas pueden no cumplir)
+    // Solo mostramos un warning en consola
+    if (checkDigit !== lastDigit) {
+      console.log(`⚠️ Cédula ${cedula} no pasa validación de dígito verificador pero se acepta`);
+    }
+    
+    return true; // Siempre true para cédulas de 10 dígitos
   }
   
-  const remainder = sum % 11;
-  const checkDigit = remainder === 0 ? 0 : 11 - remainder;
-  const lastDigit = parseInt(cedula.charAt(totalDigits - 1));
-  
-  return checkDigit === lastDigit;
+  return true;
 };
 
 // Validar NIT colombiano
