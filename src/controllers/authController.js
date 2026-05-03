@@ -71,18 +71,17 @@ const validateCNPJ = (cnpj) => {
   return digit === parseInt(cnpj.charAt(13));
 };
 
-// Validar cédula colombiana - VERSIÓN SIMPLIFICADA (solo longitud y no ceros)
+// Validar cédula colombiana - ACEPTA CUALQUIER LONGITUD ENTRE 7 Y 10
 const validateColombianId = (cedula) => {
   cedula = cedula.replace(/\D/g, '');
   
-  // Validar longitud (entre 7 y 10 dígitos)
+  // Aceptar cualquier longitud entre 7 y 10 dígitos
   if (cedula.length < 7 || cedula.length > 10) return false;
   
   // No puede ser todos ceros
   if (/^0+$/.test(cedula)) return false;
   
-  // Cédula válida (sin validación de dígito verificador)
-  return true;
+  return true; // ✅ Acepta 7, 8, 9 o 10 dígitos
 };
 
 // Validar NIT colombiano
