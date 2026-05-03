@@ -227,10 +227,11 @@ const validateBarDocument = (documentNumber, documentType, countryCode) => {
   return { isValid: true, message: '' };
 };
 
-// Validar teléfono según país
+// Validar teléfono según país - CORREGIDO
 const validatePhone = (phone, phoneCountry) => {
   if (!phone) return { isValid: true, message: '' };
   
+  // Limpiar: eliminar todo lo que no sea número
   const numbers = phone.replace(/\D/g, '');
   
   switch (phoneCountry) {
@@ -241,14 +242,15 @@ const validatePhone = (phone, phoneCountry) => {
       break;
     
     case 'CO':
+      // Colombia: debe tener exactamente 10 dígitos
       if (numbers.length !== 10) {
-        return { isValid: false, message: 'Telefone colombiano deve ter 10 dígitos' };
+        return { isValid: false, message: 'Número colombiano deve ter 10 dígitos' };
       }
       break;
     
     case 'MX':
       if (numbers.length !== 10) {
-        return { isValid: false, message: 'Telefone mexicano deve ter 10 dígitos' };
+        return { isValid: false, message: 'Número mexicano deve ter 10 dígitos' };
       }
       break;
   }
