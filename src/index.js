@@ -39,7 +39,6 @@ const startServer = async () => {
     await sequelize.sync();
     await User.sync();
     await PasswordResetToken.sync();
-    await createAdmin();
     console.log('✅ Base de datos sincronizada');
 
     app.listen(PORT, '0.0.0.0', () => {
