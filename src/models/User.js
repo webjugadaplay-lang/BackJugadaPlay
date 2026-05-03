@@ -31,6 +31,25 @@ const User = sequelize.define('User', {
   phone: {
     type: DataTypes.STRING,
   },
+  // NUEVOS CAMPOS PARA TELÉFONO
+  phoneCountry: {
+    type: DataTypes.STRING(2), // BR, CO, MX
+    field: 'phone_country',
+  },
+  // NUEVOS CAMPOS PARA IDENTIFICACIÓN
+  documentType: {
+    type: DataTypes.STRING(20), // CPF, Cédula, CURP/INE
+    field: 'document_type',
+  },
+  documentNumber: {
+    type: DataTypes.STRING(20),
+    field: 'document_number',
+    unique: true,
+  },
+  countryCode: {
+    type: DataTypes.STRING(2), // BR, CO, MX
+    field: 'country_code',
+  },
   // Campos específicos para bar
   barName: {
     type: DataTypes.STRING,
@@ -38,6 +57,11 @@ const User = sequelize.define('User', {
   },
   cnpj: {
     type: DataTypes.STRING,
+    unique: true,
+  },
+  cpf: {
+    type: DataTypes.STRING(11),
+    unique: true,
   },
   address: {
     type: DataTypes.TEXT,
