@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const sequelize = require('./config/database');
-const createAdmin = require('./utils/createAdmin');
 
 // Importar modelos
 const User = require('./models/User');
