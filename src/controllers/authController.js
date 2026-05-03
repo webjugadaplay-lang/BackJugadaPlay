@@ -37,6 +37,40 @@ const validateCPF = (cpf) => {
   return digit === parseInt(cpf.charAt(10));
 };
 
+// Validar CNPJ brasileño
+const validateCNPJ = (cnpj) => {
+  cnpj = cnpj.replace(/\D/g, '');
+  if (cnpj.length !== 14) return false;
+  
+  const invalidCNPJs = [
+    '00000000000000', '11111111111111', '22222222222222',
+    '33333333333333', '44444444444444', '55555555555555',
+    '66666666666666', '77777777777777', '88888888888888',
+    '99999999999999'
+  ];
+  if (invalidCNPJs.includes(cnpj)) return false;
+  
+  let sum = 0;
+  let factor = 5;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(cnpj.charAt(i)) * factor;
+    factor = factor === 2 ? 9 : factor - 1;
+  }
+  let digit = sum % 11;
+  digit = digit < 2 ? 0 : 11 - digit;
+  if (digit !== parseInt(cnpj.charAt(12))) return false;
+  
+  sum = 0;
+  factor = 6;
+  for (let i = 0; i < 13; i++) {
+    sum += parseInt(cnpj.charAt(i)) * factor;
+    factor = factor === 2 ? 9 : factor - 1;
+  }
+  digit = sum % 11;
+  digit = digit < 2 ? 0 : 11 - digit;
+  return digit === parseInt(cnpj.charAt(13));
+};
+
 // Validar cédula colombiana
 const validateColombianId = (cedula) => {
   cedula = cedula.replace(/\D/g, '');
@@ -60,7 +94,29 @@ const validateColombianId = (cedula) => {
   return checkDigit === lastDigit;
 };
 
-// Validar documento según país
+// Validar NIT colombiano
+const validateNIT = (nit) => {
+  nit = nit.replace(/\D/g, '');
+  if (nit.length !== 10) return false;
+  if (/^0+$/.test(nit)) return false;
+  return true;
+};
+
+// Validar RFC mexicano
+const validateRFC = (rfc) => {
+  rfc = rfc.toUpperCase();
+  const rfcRegex = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
+  return rfcRegex.test(rfc);
+};
+
+// Validar CURP mexicana
+const validateCURP = (curp) => {
+  curp = curp.toUpperCase();
+  const curpRegex = /^[A-Z]{4}[0-9]{6}[A-Z]{6}[0-9]{2}$/;
+  return curpRegex.test(curp);
+};
+
+// Validar documento según país (para JUGADOR)
 const validateDocument = (documentNumber, documentType, countryCode) => {
   if (!documentNumber) return { isValid: true, message: '' };
   
@@ -98,6 +154,62 @@ const validateDocument = (documentNumber, documentType, countryCode) => {
       break;
   }
   
+  return { isValid: true, message: '' };
+};
+
+// NUEVA FUNCIÓN: Validar documento para BAR según país y tipo
+const validateBarDocument = (documentNumber, documentType, countryCode) => {
+  if (!documentNumber) {
+    return { isValid: false, message: 'Documento es requerido' };
+  }
+
+  switch (countryCode) {
+    case 'BR':
+      if (documentType === 'CNPJ') {
+        if (!validateCNPJ(documentNumber)) {
+          return { isValid: false, message: 'CNPJ inválido' };
+        }
+      } else if (documentType === 'CPF') {
+        if (!validateCPF(documentNumber)) {
+          return { isValid: false, message: 'CPF inválido' };
+        }
+      } else {
+        return { isValid: false, message: 'Tipo de documento inválido para Brasil' };
+      }
+      break;
+    
+    case 'CO':
+      if (documentType === 'NIT') {
+        if (!validateNIT(documentNumber)) {
+          return { isValid: false, message: 'NIT inválido' };
+        }
+      } else if (documentType === 'Cédula') {
+        if (!validateColombianId(documentNumber)) {
+          return { isValid: false, message: 'Cédula inválida' };
+        }
+      } else {
+        return { isValid: false, message: 'Tipo de documento inválido para Colombia' };
+      }
+      break;
+    
+    case 'MX':
+      if (documentType === 'RFC') {
+        if (!validateRFC(documentNumber)) {
+          return { isValid: false, message: 'RFC inválido' };
+        }
+      } else if (documentType === 'CURP') {
+        if (!validateCURP(documentNumber)) {
+          return { isValid: false, message: 'CURP inválida' };
+        }
+      } else {
+        return { isValid: false, message: 'Tipo de documento inválido para México' };
+      }
+      break;
+    
+    default:
+      return { isValid: false, message: 'País no soportado' };
+  }
+
   return { isValid: true, message: '' };
 };
 
@@ -141,7 +253,7 @@ const generateToken = (user) => {
   );
 };
 
-// Registro de usuario (bar o jugador) - MODIFICADO
+// Registro de usuario (bar o jugador) - MODIFICADO COMPLETO
 exports.register = async (req, res) => {
   try {
     const { 
@@ -152,8 +264,6 @@ exports.register = async (req, res) => {
       phone, 
       phoneCountry,
       barName, 
-      cnpj, 
-      cpf,
       address, 
       playerNickname,
       documentType,
@@ -167,30 +277,60 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'Email ya registrado' });
     }
 
-    // NUEVO: Verificar documento único (solo para jugadores)
+    // ============ VALIDACIONES PARA BAR ============
+    if (role === 'bar') {
+      // Validar que lleguen los campos necesarios
+      if (!documentNumber || !documentType || !countryCode) {
+        return res.status(400).json({ 
+          message: 'Documento, tipo de documento y país son requeridos para bares' 
+        });
+      }
+
+      // Verificar documento único (por documentNumber o por cnpj/cpf)
+      const existingDocument = await User.findOne({ 
+        where: {
+          [Sequelize.Op.or]: [
+            { documentNumber: documentNumber },
+            ...(documentType === 'CNPJ' ? [{ cnpj: documentNumber.replace(/\D/g, '') }] : []),
+            ...(documentType === 'CPF' ? [{ cpf: documentNumber.replace(/\D/g, '') }] : [])
+          ]
+        }
+      });
+      
+      if (existingDocument) {
+        return res.status(400).json({ message: `${documentType} ya registrado` });
+      }
+
+      // Validar formato del documento según país
+      const docValidation = validateBarDocument(documentNumber, documentType, countryCode);
+      if (!docValidation.isValid) {
+        return res.status(400).json({ message: docValidation.message });
+      }
+    }
+
+    // ============ VALIDACIONES PARA JUGADOR ============
     if (role === 'player' && documentNumber) {
+      // Verificar documento único
       const existingDocument = await User.findOne({ where: { documentNumber } });
       if (existingDocument) {
         return res.status(400).json({ message: `${documentType} ya registrado` });
       }
-    }
 
-    // NUEVO: Validar documento según país
-    if (role === 'player' && documentNumber) {
+      // Validar documento según país
       const docValidation = validateDocument(documentNumber, documentType, countryCode);
       if (!docValidation.isValid) {
         return res.status(400).json({ message: docValidation.message });
       }
     }
 
-    // NUEVO: Validar teléfono
+    // ============ VALIDAR TELÉFONO ============
     const phoneValidation = validatePhone(phone, phoneCountry);
     if (!phoneValidation.isValid) {
       return res.status(400).json({ message: phoneValidation.message });
     }
 
-    // Crear usuario con los nuevos campos
-    const user = await User.create({
+    // ============ CREAR USUARIO ============
+    const userData = {
       email,
       password,
       role,
@@ -198,19 +338,33 @@ exports.register = async (req, res) => {
       phone,
       phoneCountry: phoneCountry || null,
       countryCode: countryCode || null,
-      barName: role === 'bar' ? barName : null,
-      cnpj: role === 'bar' ? cnpj : null,
-      cpf: role === 'bar' ? cpf : null,
-      address: role === 'bar' ? address : null,
-      playerNickname: role === 'player' ? (playerNickname || name) : null,
-      // NUEVOS: Campos de identificación para jugador
-      documentType: role === 'player' ? documentType : null,
-      documentNumber: role === 'player' ? documentNumber : null,
-    });
+    };
+
+    if (role === 'bar') {
+      const cleanDocument = documentNumber.replace(/\D/g, '');
+      userData.barName = barName;
+      userData.address = address;
+      userData.documentType = documentType;
+      userData.documentNumber = documentNumber;
+      // Guardar en campos específicos según tipo
+      if (documentType === 'CNPJ') {
+        userData.cnpj = cleanDocument;
+      } else if (documentType === 'CPF') {
+        userData.cpf = cleanDocument;
+      }
+    } else if (role === 'player') {
+      userData.playerNickname = playerNickname || name;
+      userData.documentType = documentType || null;
+      userData.documentNumber = documentNumber || null;
+    }
+
+    // Crear usuario
+    const user = await User.create(userData);
 
     const token = generateToken(user);
 
-    res.status(201).json({
+    // Respuesta exitosa
+    const responseData = {
       message: 'Usuario creado exitosamente',
       token,
       user: {
@@ -221,14 +375,23 @@ exports.register = async (req, res) => {
         phone: user.phone,
         phoneCountry: user.phoneCountry,
         countryCode: user.countryCode,
-        documentType: user.documentType,
-        barName: user.barName || null,
-        playerNickname: user.playerNickname || null,
-      },
-    });
+      }
+    };
+
+    if (role === 'bar') {
+      responseData.user.barName = user.barName;
+      responseData.user.address = user.address;
+      responseData.user.documentType = user.documentType;
+    } else if (role === 'player') {
+      responseData.user.playerNickname = user.playerNickname;
+      responseData.user.documentType = user.documentType;
+    }
+
+    res.status(201).json(responseData);
+
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Error en el servidor' });
+    res.status(500).json({ message: 'Error en el servidor', error: error.message });
   }
 };
 
@@ -251,7 +414,7 @@ exports.login = async (req, res) => {
 
     const token = generateToken(user);
 
-    res.json({
+    const responseData = {
       message: 'Login exitoso',
       token,
       user: {
@@ -262,11 +425,20 @@ exports.login = async (req, res) => {
         phone: user.phone,
         phoneCountry: user.phoneCountry,
         countryCode: user.countryCode,
-        documentType: user.documentType,
-        barName: user.barName || null,
-        playerNickname: user.playerNickname || null,
-      },
-    });
+      }
+    };
+
+    if (user.role === 'bar') {
+      responseData.user.barName = user.barName;
+      responseData.user.address = user.address;
+      responseData.user.documentType = user.documentType;
+    } else if (user.role === 'player') {
+      responseData.user.playerNickname = user.playerNickname;
+      responseData.user.documentType = user.documentType;
+    }
+
+    res.json(responseData);
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error en el servidor' });
