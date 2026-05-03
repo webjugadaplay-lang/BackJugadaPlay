@@ -71,7 +71,7 @@ const validateCNPJ = (cnpj) => {
   return digit === parseInt(cnpj.charAt(13));
 };
 
-// Validar cédula colombiana - VERSIÓN MÁS FLEXIBLE
+// Validar cédula colombiana - VERSIÓN SIMPLIFICADA (solo longitud y no ceros)
 const validateColombianId = (cedula) => {
   cedula = cedula.replace(/\D/g, '');
   
@@ -81,33 +81,7 @@ const validateColombianId = (cedula) => {
   // No puede ser todos ceros
   if (/^0+$/.test(cedula)) return false;
   
-  // Para cédulas de 10 dígitos, validar dígito verificador (opcional)
-  // Si no pasa la validación del dígito, igual la aceptamos si es de 10 dígitos
-  if (cedula.length === 10) {
-    // Intentar validar dígito verificador
-    const totalDigits = cedula.length;
-    let sum = 0;
-    
-    for (let i = 0; i < totalDigits - 1; i++) {
-      const digit = parseInt(cedula.charAt(i));
-      const position = totalDigits - i;
-      const factor = position < 3 ? position : position % 6 + 2;
-      sum += digit * factor;
-    }
-    
-    const remainder = sum % 11;
-    const checkDigit = remainder === 0 ? 0 : 11 - remainder;
-    const lastDigit = parseInt(cedula.charAt(totalDigits - 1));
-    
-    // Si la validación falla, igual aceptamos (cédulas antiguas pueden no cumplir)
-    // Solo mostramos un warning en consola
-    if (checkDigit !== lastDigit) {
-      console.log(`⚠️ Cédula ${cedula} no pasa validación de dígito verificador pero se acepta`);
-    }
-    
-    return true; // Siempre true para cédulas de 10 dígitos
-  }
-  
+  // Cédula válida (sin validación de dígito verificador)
   return true;
 };
 
@@ -144,15 +118,14 @@ const validateCURP = (curp) => {
 const validateDocument = (documentNumber, documentType, countryCode) => {
   if (!documentNumber) return { isValid: true, message: '' };
   
-  const cleanNumber = documentNumber.replace(/\D/g, '');
-  
   switch (countryCode) {
     case 'BR':
+      const cleanCPF = documentNumber.replace(/\D/g, '');
       if (documentType === 'CPF') {
-        if (cleanNumber.length !== 11) {
+        if (cleanCPF.length !== 11) {
           return { isValid: false, message: 'CPF deve ter 11 dígitos' };
         }
-        if (!validateCPF(cleanNumber)) {
+        if (!validateCPF(cleanCPF)) {
           return { isValid: false, message: 'CPF inválido' };
         }
       }
@@ -160,22 +133,16 @@ const validateDocument = (documentNumber, documentType, countryCode) => {
     
     case 'CO':
       if (documentType === 'Cédula') {
-        if (cleanNumber.length < 7 || cleanNumber.length > 10) {
-          return { isValid: false, message: 'Cédula deve ter entre 7 e 10 dígitos' };
-        }
-        if (!validateColombianId(cleanNumber)) {
-          return { isValid: false, message: 'Cédula inválida' };
+        if (!validateColombianId(documentNumber)) {
+          return { isValid: false, message: 'Cédula inválida. Debe tener entre 7 y 10 dígitos' };
         }
       }
       break;
     
     case 'MX':
       if (documentType === 'CURP') {
-        if (cleanNumber.length !== 18) {
-          return { isValid: false, message: 'CURP deve ter 18 caracteres' };
-        }
-        if (!validateCURP(cleanNumber)) {
-          return { isValid: false, message: 'CURP inválida' };
+        if (!validateCURP(documentNumber)) {
+          return { isValid: false, message: 'CURP inválida. Debe tener 18 caracteres' };
         }
       }
       break;
@@ -184,7 +151,7 @@ const validateDocument = (documentNumber, documentType, countryCode) => {
   return { isValid: true, message: '' };
 };
 
-// NUEVA FUNCIÓN: Validar documento para BAR según país y tipo
+// Validar documento para BAR según país y tipo
 const validateBarDocument = (documentNumber, documentType, countryCode) => {
   if (!documentNumber) {
     return { isValid: false, message: 'Documento es requerido' };
@@ -208,11 +175,11 @@ const validateBarDocument = (documentNumber, documentType, countryCode) => {
     case 'CO':
       if (documentType === 'NIT') {
         if (!validateNIT(documentNumber)) {
-          return { isValid: false, message: 'NIT inválido' };
+          return { isValid: false, message: 'NIT inválido. Debe tener 10 dígitos' };
         }
       } else if (documentType === 'Cédula') {
         if (!validateColombianId(documentNumber)) {
-          return { isValid: false, message: 'Cédula inválida' };
+          return { isValid: false, message: 'Cédula inválida. Debe tener entre 7 y 10 dígitos' };
         }
       } else {
         return { isValid: false, message: 'Tipo de documento inválido para Colombia' };
@@ -244,11 +211,10 @@ const validateBarDocument = (documentNumber, documentType, countryCode) => {
   return { isValid: true, message: '' };
 };
 
-// Validar teléfono según país - CORREGIDO
+// Validar teléfono según país
 const validatePhone = (phone, phoneCountry) => {
   if (!phone) return { isValid: true, message: '' };
   
-  // Limpiar: eliminar todo lo que no sea número
   const numbers = phone.replace(/\D/g, '');
   
   switch (phoneCountry) {
@@ -259,7 +225,6 @@ const validatePhone = (phone, phoneCountry) => {
       break;
     
     case 'CO':
-      // Colombia: debe tener exactamente 10 dígitos
       if (numbers.length !== 10) {
         return { isValid: false, message: 'Número colombiano deve ter 10 dígitos' };
       }
@@ -286,7 +251,7 @@ const generateToken = (user) => {
   );
 };
 
-// Registro de usuario (bar o jugador) - MODIFICADO COMPLETO
+// Registro de usuario (bar o jugador)
 exports.register = async (req, res) => {
   try {
     const { 
@@ -312,14 +277,13 @@ exports.register = async (req, res) => {
 
     // ============ VALIDACIONES PARA BAR ============
     if (role === 'bar') {
-      // Validar que lleguen los campos necesarios
       if (!documentNumber || !documentType || !countryCode) {
         return res.status(400).json({ 
           message: 'Documento, tipo de documento y país son requeridos para bares' 
         });
       }
 
-      // Verificar documento único (por documentNumber)
+      // Verificar documento único
       const existingDocument = await User.findOne({ 
         where: {
           [Sequelize.Op.or]: [
@@ -334,7 +298,6 @@ exports.register = async (req, res) => {
         return res.status(400).json({ message: `${documentType} ya registrado` });
       }
 
-      // Validar formato del documento según país
       const docValidation = validateBarDocument(documentNumber, documentType, countryCode);
       if (!docValidation.isValid) {
         return res.status(400).json({ message: docValidation.message });
@@ -343,13 +306,11 @@ exports.register = async (req, res) => {
 
     // ============ VALIDACIONES PARA JUGADOR ============
     if (role === 'player' && documentNumber) {
-      // Verificar documento único
       const existingDocument = await User.findOne({ where: { documentNumber } });
       if (existingDocument) {
         return res.status(400).json({ message: `${documentType} ya registrado` });
       }
 
-      // Validar documento según país
       const docValidation = validateDocument(documentNumber, documentType, countryCode);
       if (!docValidation.isValid) {
         return res.status(400).json({ message: docValidation.message });
@@ -368,13 +329,12 @@ exports.register = async (req, res) => {
       password,
       role,
       name,
-      phone,
+      phone: phone ? phone.replace(/\D/g, '') : null,
       phoneCountry: phoneCountry || null,
       countryCode: countryCode || null,
     };
 
     if (role === 'bar') {
-      // Para México, no eliminamos caracteres especiales porque el RFC/CURP tiene letras
       let cleanDocument = documentNumber;
       let cnpjValue = null;
       let cpfValue = null;
@@ -393,7 +353,6 @@ exports.register = async (req, res) => {
           cleanDocument = documentNumber.replace(/\D/g, '');
         }
       } else if (countryCode === 'MX') {
-        // México: mantener mayúsculas, no limpiar caracteres especiales
         cleanDocument = documentNumber.toUpperCase();
       }
       
@@ -409,12 +368,9 @@ exports.register = async (req, res) => {
       userData.documentNumber = documentNumber || null;
     }
 
-    // Crear usuario
     const user = await User.create(userData);
-
     const token = generateToken(user);
 
-    // Respuesta exitosa
     const responseData = {
       message: 'Usuario creado exitosamente',
       token,
@@ -446,18 +402,16 @@ exports.register = async (req, res) => {
   }
 };
 
-// Login (sin cambios, pero la respuesta incluye más campos)
+// Login
 exports.login = async (req, res) => {
   try {
     const { email, password, role } = req.body;
 
-    // Buscar usuario por email y role
     const user = await User.findOne({ where: { email, role } });
     if (!user) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
-    // Verificar contraseña
     const isValid = await user.validPassword(password);
     if (!isValid) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
@@ -496,7 +450,7 @@ exports.login = async (req, res) => {
   }
 };
 
-// Forgot password (sin cambios)
+// Forgot password
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -505,40 +459,32 @@ exports.forgotPassword = async (req, res) => {
       return res.status(400).json({ message: 'Email es requerido' });
     }
 
-    // Buscar usuario por email
     const user = await User.findOne({ where: { email: email.toLowerCase() } });
 
-    // Verificar si el usuario NO existe
     if (!user) {
       return res.status(404).json({
         message: 'Correo electrónico no registrado'
       });
     }
 
-    // Si el usuario existe, generar token
     const resetToken = crypto.randomBytes(32).toString('hex');
     const hashedToken = await bcrypt.hash(resetToken, 10);
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
-    // Guardar token en la base de datos
     await PasswordResetToken.create({
       user_id: user.id,
       token: hashedToken,
       expires_at: expiresAt,
     });
 
-    // Construir enlace de recuperación
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
 
-    // ENVIAR CORREO REAL
     const emailResult = await sendPasswordResetEmail(email, resetUrl, user.name);
 
     if (!emailResult.success) {
       console.error('Error al enviar correo:', emailResult.error);
-      // No mostramos error al usuario por seguridad, solo log interno
     }
 
-    // Respuesta específica para cuando el email existe
     return res.status(200).json({
       message: `Revisa el email ${email}, recibirás un enlace para recuperar tu contraseña.`
     });
@@ -549,7 +495,7 @@ exports.forgotPassword = async (req, res) => {
   }
 };
 
-// Verificar token de recuperación (sin cambios)
+// Verificar token de recuperación
 exports.verifyResetToken = async (req, res) => {
   try {
     const { token } = req.body;
@@ -558,12 +504,10 @@ exports.verifyResetToken = async (req, res) => {
       return res.status(400).json({ message: 'Token es requerido' });
     }
 
-    // Buscar token en la base de datos (sin hashear, buscamos por token original no)
-    // Nota: Como guardamos el token hasheado, necesitamos buscar todos los tokens válidos y comparar
     const validTokens = await PasswordResetToken.findAll({
       where: {
         used_at: null,
-        expires_at: { [Sequelize.Op.gt]: new Date() } // Token no expirado
+        expires_at: { [Sequelize.Op.gt]: new Date() }
       }
     });
 
@@ -587,7 +531,7 @@ exports.verifyResetToken = async (req, res) => {
   }
 };
 
-// Restablecer contraseña (sin cambios)
+// Restablecer contraseña
 exports.resetPassword = async (req, res) => {
   try {
     const { token, password } = req.body;
@@ -600,7 +544,6 @@ exports.resetPassword = async (req, res) => {
       return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres' });
     }
 
-    // Buscar token válido
     const validTokens = await PasswordResetToken.findAll({
       where: {
         used_at: null,
@@ -621,17 +564,14 @@ exports.resetPassword = async (req, res) => {
       return res.status(400).json({ message: 'Token inválido o expirado' });
     }
 
-    // Actualizar la contraseña del usuario
     const user = await User.findByPk(foundToken.user_id);
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    // Actualizar contraseña (el hook beforeUpdate se encargará del hasheo)
     user.password = password;
     await user.save();
 
-    // Marcar token como usado
     foundToken.used_at = new Date();
     await foundToken.save();
 
