@@ -102,14 +102,21 @@ const validateNIT = (nit) => {
   return true;
 };
 
-// Validar RFC mexicano
-const validateRFC = (rfc) => {
+// Validar RFC Persona Moral mexicano (12 caracteres: 3 letras + 6 números + 3 caracteres)
+const validateRFCPersonaMoral = (rfc) => {
   rfc = rfc.toUpperCase();
-  const rfcRegex = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
+  const rfcRegex = /^[A-ZÑ&]{3}[0-9]{6}[A-Z0-9]{3}$/;
   return rfcRegex.test(rfc);
 };
 
-// Validar CURP mexicana
+// Validar RFC Persona Física mexicano (13 caracteres: 4 letras + 6 números + 3 caracteres)
+const validateRFCPersonaFisica = (rfc) => {
+  rfc = rfc.toUpperCase();
+  const rfcRegex = /^[A-ZÑ&]{4}[0-9]{6}[A-Z0-9]{3}$/;
+  return rfcRegex.test(rfc);
+};
+
+// Validar CURP mexicana (18 caracteres)
 const validateCURP = (curp) => {
   curp = curp.toUpperCase();
   const curpRegex = /^[A-Z]{4}[0-9]{6}[A-Z]{6}[0-9]{2}$/;
@@ -146,9 +153,12 @@ const validateDocument = (documentNumber, documentType, countryCode) => {
       break;
     
     case 'MX':
-      if (documentType === 'CURP / INE') {
-        if (cleanNumber.length < 10 || cleanNumber.length > 18) {
-          return { isValid: false, message: 'Identificação deve ter entre 10 e 18 caracteres' };
+      if (documentType === 'CURP') {
+        if (cleanNumber.length !== 18) {
+          return { isValid: false, message: 'CURP deve ter 18 caracteres' };
+        }
+        if (!validateCURP(cleanNumber)) {
+          return { isValid: false, message: 'CURP inválida' };
         }
       }
       break;
@@ -193,13 +203,17 @@ const validateBarDocument = (documentNumber, documentType, countryCode) => {
       break;
     
     case 'MX':
-      if (documentType === 'RFC') {
-        if (!validateRFC(documentNumber)) {
-          return { isValid: false, message: 'RFC inválido' };
+      if (documentType === 'RFC Persona Moral') {
+        if (!validateRFCPersonaMoral(documentNumber)) {
+          return { isValid: false, message: 'RFC Persona Moral inválido. Debe tener 12 caracteres (3 letras + 6 números + 3 caracteres)' };
+        }
+      } else if (documentType === 'RFC Persona Física') {
+        if (!validateRFCPersonaFisica(documentNumber)) {
+          return { isValid: false, message: 'RFC Persona Física inválido. Debe tener 13 caracteres (4 letras + 6 números + 3 caracteres)' };
         }
       } else if (documentType === 'CURP') {
         if (!validateCURP(documentNumber)) {
-          return { isValid: false, message: 'CURP inválida' };
+          return { isValid: false, message: 'CURP inválida. Debe tener 18 caracteres' };
         }
       } else {
         return { isValid: false, message: 'Tipo de documento inválido para México' };
@@ -286,7 +300,7 @@ exports.register = async (req, res) => {
         });
       }
 
-      // Verificar documento único (por documentNumber o por cnpj/cpf)
+      // Verificar documento único (por documentNumber)
       const existingDocument = await User.findOne({ 
         where: {
           [Sequelize.Op.or]: [
@@ -341,17 +355,35 @@ exports.register = async (req, res) => {
     };
 
     if (role === 'bar') {
-      const cleanDocument = documentNumber.replace(/\D/g, '');
+      // Para México, no eliminamos caracteres especiales porque el RFC/CURP tiene letras
+      let cleanDocument = documentNumber;
+      let cnpjValue = null;
+      let cpfValue = null;
+      
+      if (countryCode === 'BR') {
+        cleanDocument = documentNumber.replace(/\D/g, '');
+        if (documentType === 'CNPJ') {
+          cnpjValue = cleanDocument;
+        } else if (documentType === 'CPF') {
+          cpfValue = cleanDocument;
+        }
+      } else if (countryCode === 'CO') {
+        if (documentType === 'NIT') {
+          cleanDocument = documentNumber.replace(/-/g, '').replace(/\D/g, '');
+        } else if (documentType === 'Cédula') {
+          cleanDocument = documentNumber.replace(/\D/g, '');
+        }
+      } else if (countryCode === 'MX') {
+        // México: mantener mayúsculas, no limpiar caracteres especiales
+        cleanDocument = documentNumber.toUpperCase();
+      }
+      
       userData.barName = barName;
       userData.address = address;
       userData.documentType = documentType;
-      userData.documentNumber = documentNumber;
-      // Guardar en campos específicos según tipo
-      if (documentType === 'CNPJ') {
-        userData.cnpj = cleanDocument;
-      } else if (documentType === 'CPF') {
-        userData.cpf = cleanDocument;
-      }
+      userData.documentNumber = cleanDocument;
+      userData.cnpj = cnpjValue;
+      userData.cpf = cpfValue;
     } else if (role === 'player') {
       userData.playerNickname = playerNickname || name;
       userData.documentType = documentType || null;
