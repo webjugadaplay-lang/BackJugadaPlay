@@ -9,6 +9,14 @@ const User = sequelize.define('User', {
     defaultValue: DataTypes.UUIDV4,
     primaryKey: true,
   },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  nickname: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   email: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -18,65 +26,47 @@ const User = sequelize.define('User', {
   password: {
     type: DataTypes.STRING,
     allowNull: false,
+    validate: {
+      len: [6, 100],
+    },
   },
-  role: {
-    type: DataTypes.ENUM('bar', 'player', 'admin'),
+  country: {
+    type: DataTypes.ENUM('BR', 'CO', 'MX'),
     allowNull: false,
-    defaultValue: 'player',
   },
-  name: {
-    type: DataTypes.STRING,
+  phoneCountry: {
+    type: DataTypes.STRING(5),
+    field: 'phone_country',
     allowNull: false,
   },
   phone: {
-    type: DataTypes.STRING,
+    type: DataTypes.STRING(20),
+    allowNull: false,
   },
-  // NUEVOS CAMPOS PARA TELÉFONO
-  phoneCountry: {
-    type: DataTypes.STRING(2), // BR, CO, MX
-    field: 'phone_country',
-  },
-  // NUEVOS CAMPOS PARA IDENTIFICACIÓN
   documentType: {
-    type: DataTypes.STRING(20), // CPF, Cédula, CURP/INE
+    type: DataTypes.STRING(20),
     field: 'document_type',
+    allowNull: false,
   },
   documentNumber: {
     type: DataTypes.STRING(20),
     field: 'document_number',
+    allowNull: false,
     unique: true,
-  },
-  countryCode: {
-    type: DataTypes.STRING(2), // BR, CO, MX
-    field: 'country_code',
-  },
-  // Campos específicos para bar
-  barName: {
-    type: DataTypes.STRING,
-    field: 'bar_name',
-  },
-  cnpj: {
-    type: DataTypes.STRING,
-    unique: true,
-  },
-  cpf: {
-    type: DataTypes.STRING(11),
-    unique: true,
-  },
-  address: {
-    type: DataTypes.TEXT,
-  },
-  // Campos específicos para jugador
-  playerNickname: {
-    type: DataTypes.STRING,
-    field: 'player_nickname',
   },
 }, {
   timestamps: true,
   tableName: 'users',
 });
 
-// Hash de contraseña antes de crear/actualizar
+// Relación: User tiene muchos Bars
+User.associate = (models) => {
+  User.hasMany(models.Bar, {
+    foreignKey: 'ownerId',
+    as: 'bars',
+  });
+};
+
 User.beforeCreate(async (user) => {
   if (user.password) {
     const salt = await bcrypt.genSalt(10);
@@ -84,14 +74,6 @@ User.beforeCreate(async (user) => {
   }
 });
 
-User.beforeUpdate(async (user) => {
-  if (user.changed('password')) {
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(user.password, salt);
-  }
-});
-
-// Método para verificar contraseña
 User.prototype.validPassword = async function(password) {
   return await bcrypt.compare(password, this.password);
 };
