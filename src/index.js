@@ -36,7 +36,8 @@ const startServer = async () => {
     if (User.associate) User.associate({ Bar });
     if (Bar.associate) Bar.associate({ User });
 
-    await sequelize.sync();
+    //await sequelize.sync();
+    await sequelize.sync({ alter: true });
     await User.sync();
     await Bar.sync();
     await PasswordResetToken.sync();
