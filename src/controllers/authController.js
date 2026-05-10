@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const { Sequelize } = require('sequelize');
 const User = require('../models/User');
+const Bar = require('../models/Bar');
 const PasswordResetToken = require('../models/PasswordResetToken');
 const { sendPasswordResetEmail } = require('../services/emailService');
 const jwt = require('jsonwebtoken');
@@ -12,14 +13,14 @@ const jwt = require('jsonwebtoken');
 const validateCPF = (cpf) => {
   cpf = cpf.replace(/\D/g, '');
   if (cpf.length !== 11) return false;
-  
+
   const invalidCPFs = [
     '00000000000', '11111111111', '22222222222', '33333333333',
     '44444444444', '55555555555', '66666666666', '77777777777',
     '88888888888', '99999999999'
   ];
   if (invalidCPFs.includes(cpf)) return false;
-  
+
   let sum = 0;
   for (let i = 0; i < 9; i++) {
     sum += parseInt(cpf.charAt(i)) * (10 - i);
@@ -27,7 +28,7 @@ const validateCPF = (cpf) => {
   let digit = 11 - (sum % 11);
   if (digit >= 10) digit = 0;
   if (digit !== parseInt(cpf.charAt(9))) return false;
-  
+
   sum = 0;
   for (let i = 0; i < 10; i++) {
     sum += parseInt(cpf.charAt(i)) * (11 - i);
@@ -41,7 +42,7 @@ const validateCPF = (cpf) => {
 const validateCNPJ = (cnpj) => {
   cnpj = cnpj.replace(/\D/g, '');
   if (cnpj.length !== 14) return false;
-  
+
   const invalidCNPJs = [
     '00000000000000', '11111111111111', '22222222222222',
     '33333333333333', '44444444444444', '55555555555555',
@@ -49,7 +50,7 @@ const validateCNPJ = (cnpj) => {
     '99999999999999'
   ];
   if (invalidCNPJs.includes(cnpj)) return false;
-  
+
   let sum = 0;
   let factor = 5;
   for (let i = 0; i < 12; i++) {
@@ -59,7 +60,7 @@ const validateCNPJ = (cnpj) => {
   let digit = sum % 11;
   digit = digit < 2 ? 0 : 11 - digit;
   if (digit !== parseInt(cnpj.charAt(12))) return false;
-  
+
   sum = 0;
   factor = 6;
   for (let i = 0; i < 13; i++) {
@@ -74,13 +75,13 @@ const validateCNPJ = (cnpj) => {
 // Validar cédula colombiana - ACEPTA CUALQUIER LONGITUD ENTRE 7 Y 10
 const validateColombianId = (cedula) => {
   cedula = cedula.replace(/\D/g, '');
-  
+
   // Aceptar cualquier longitud entre 7 y 10 dígitos
   if (cedula.length < 7 || cedula.length > 10) return false;
-  
+
   // No puede ser todos ceros
   if (/^0+$/.test(cedula)) return false;
-  
+
   return true; // ✅ Acepta 7, 8, 9 o 10 dígitos
 };
 
@@ -116,7 +117,7 @@ const validateCURP = (curp) => {
 // Validar documento según país (para JUGADOR)
 const validateDocument = (documentNumber, documentType, countryCode) => {
   if (!documentNumber) return { isValid: true, message: '' };
-  
+
   switch (countryCode) {
     case 'BR':
       const cleanCPF = documentNumber.replace(/\D/g, '');
@@ -129,7 +130,7 @@ const validateDocument = (documentNumber, documentType, countryCode) => {
         }
       }
       break;
-    
+
     case 'CO':
       if (documentType === 'Cédula') {
         if (!validateColombianId(documentNumber)) {
@@ -137,7 +138,7 @@ const validateDocument = (documentNumber, documentType, countryCode) => {
         }
       }
       break;
-    
+
     case 'MX':
       if (documentType === 'CURP') {
         if (!validateCURP(documentNumber)) {
@@ -146,7 +147,7 @@ const validateDocument = (documentNumber, documentType, countryCode) => {
       }
       break;
   }
-  
+
   return { isValid: true, message: '' };
 };
 
@@ -170,7 +171,7 @@ const validateBarDocument = (documentNumber, documentType, countryCode) => {
         return { isValid: false, message: 'Tipo de documento inválido para Brasil' };
       }
       break;
-    
+
     case 'CO':
       if (documentType === 'NIT') {
         if (!validateNIT(documentNumber)) {
@@ -184,7 +185,7 @@ const validateBarDocument = (documentNumber, documentType, countryCode) => {
         return { isValid: false, message: 'Tipo de documento inválido para Colombia' };
       }
       break;
-    
+
     case 'MX':
       if (documentType === 'RFC Persona Moral') {
         if (!validateRFCPersonaMoral(documentNumber)) {
@@ -202,7 +203,7 @@ const validateBarDocument = (documentNumber, documentType, countryCode) => {
         return { isValid: false, message: 'Tipo de documento inválido para México' };
       }
       break;
-    
+
     default:
       return { isValid: false, message: 'País no soportado' };
   }
@@ -213,29 +214,29 @@ const validateBarDocument = (documentNumber, documentType, countryCode) => {
 // Validar teléfono según país
 const validatePhone = (phone, phoneCountry) => {
   if (!phone) return { isValid: true, message: '' };
-  
+
   const numbers = phone.replace(/\D/g, '');
-  
+
   switch (phoneCountry) {
     case 'BR':
       if (numbers.length < 10 || numbers.length > 11) {
         return { isValid: false, message: 'Telefone brasileiro deve ter 10 ou 11 dígitos' };
       }
       break;
-    
+
     case 'CO':
       if (numbers.length !== 10) {
         return { isValid: false, message: 'Número colombiano deve ter 10 dígitos' };
       }
       break;
-    
+
     case 'MX':
       if (numbers.length !== 10) {
         return { isValid: false, message: 'Número mexicano deve ter 10 dígitos' };
       }
       break;
   }
-  
+
   return { isValid: true, message: '' };
 };
 
@@ -253,21 +254,23 @@ const generateToken = (user) => {
 // Registro de usuario (player o owner)
 exports.register = async (req, res) => {
   try {
-    const { 
-      email, 
-      password, 
-      role, 
-      name, 
+    const {
+      email,
+      password,
+      role,
+      name,
       nickname,
-      phone, 
+      phone,
       phoneCountry,
       documentType,
       documentNumber,
-      country
+      country,
+      barName,    // ← NUEVO: nombre del bar
+      address     // ← NUEVO: dirección del bar
     } = req.body;
 
     console.log("=== DATOS RECIBIDOS ===");
-    console.log({ email, role, name, country, phoneCountry, documentType });
+    console.log({ email, role, name, country, phoneCountry, documentType, barName, address });
 
     // Verificar campos requeridos
     if (!country) {
@@ -296,9 +299,17 @@ exports.register = async (req, res) => {
     // ============ VALIDACIONES PARA OWNER ============
     if (role === 'owner') {
       if (!documentNumber || !documentType || !country) {
-        return res.status(400).json({ 
-          message: 'Documento, tipo de documento y país son requeridos para dueños de bar' 
+        return res.status(400).json({
+          message: 'Documento, tipo de documento y país son requeridos para dueños de bar'
         });
+      }
+
+      // Validar que llegaron los campos del bar
+      if (!barName) {
+        return res.status(400).json({ message: 'Nombre del bar es requerido' });
+      }
+      if (!address) {
+        return res.status(400).json({ message: 'Dirección del bar es requerida' });
       }
 
       const existingDocument = await User.findOne({ where: { documentNumber } });
@@ -320,7 +331,7 @@ exports.register = async (req, res) => {
 
     // ============ LIMPIAR DOCUMENTO ============
     let cleanDocument = documentNumber;
-    
+
     if (country === 'BR' && documentType === 'CPF') {
       cleanDocument = documentNumber.replace(/\D/g, '');
     } else if (country === 'CO' && documentType === 'Cédula') {
@@ -336,7 +347,7 @@ exports.register = async (req, res) => {
       role: role === 'owner' ? 'owner' : role,
       name,
       nickname: nickname || name,
-      country: country,  // ← Asegurar que se envía
+      country: country,
       phoneCountry: phoneCountry,
       phone: phone ? phone.replace(/\D/g, '') : null,
       documentType: documentType || null,
@@ -346,10 +357,23 @@ exports.register = async (req, res) => {
     console.log("userData a crear:", userData);
 
     const user = await User.create(userData);
+
+    let newBar = null;
+
+    // Si es owner, crear el bar
+    if (role === 'owner') {
+      newBar = await Bar.create({
+        ownerId: user.id,
+        barName: barName,
+        address: address,
+        isActive: true,
+      });
+    }
+
     const token = generateToken(user);
 
     const responseData = {
-      message: 'Usuario creado exitosamente',
+      message: role === 'owner' ? 'Bar registrado exitosamente' : 'Jugador registrado exitosamente',
       token,
       user: {
         id: user.id,
@@ -357,12 +381,19 @@ exports.register = async (req, res) => {
         role: user.role,
         name: user.name,
         nickname: user.nickname,
-        phone: user.phone,
-        phoneCountry: user.phoneCountry,
         country: user.country,
-        documentType: user.documentType,
       }
     };
+
+    // Si es owner, agregar info del bar
+    if (role === 'owner' && newBar) {
+      responseData.bar = {
+        id: newBar.id,
+        barName: newBar.barName,
+        address: newBar.address,
+        isActive: newBar.isActive,
+      };
+    }
 
     res.status(201).json(responseData);
 
@@ -387,6 +418,15 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
+    // Si es owner, obtener sus bares
+    let bars = [];
+    if (user.role === 'owner') {
+      bars = await Bar.findAll({
+        where: { ownerId: user.id },
+        attributes: ['id', 'barName', 'address', 'isActive']
+      });
+    }
+
     const token = generateToken(user);
 
     const responseData = {
@@ -404,6 +444,11 @@ exports.login = async (req, res) => {
         documentType: user.documentType,
       }
     };
+
+    // Si es owner, agregar lista de bares
+    if (bars.length > 0) {
+      responseData.bars = bars;
+    }
 
     res.json(responseData);
 

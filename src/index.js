@@ -32,16 +32,24 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('📦 Conectado a PostgreSQL...');
 
-    // Aplicar relaciones
-    if (User.associate) User.associate({ Bar });
-    if (Bar.associate) Bar.associate({ User });
+    // Establecer relaciones
+    User.hasMany(Bar, {
+      foreignKey: 'ownerId',
+      as: 'bars',
+      onDelete: 'CASCADE'
+    });
+
+    Bar.belongsTo(User, {
+      foreignKey: 'ownerId',
+      as: 'owner'
+    });
 
     //await sequelize.sync();
     await sequelize.sync({ alter: true });
     await User.sync();
     await Bar.sync();
     await PasswordResetToken.sync();
-    
+
     console.log('✅ Base de datos sincronizada');
     console.log('📊 Tablas: users, bars, password_reset_tokens');
 

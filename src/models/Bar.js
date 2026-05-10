@@ -1,4 +1,3 @@
-// backend/src/models/Bar.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
@@ -42,13 +41,5 @@ const Bar = sequelize.define('Bar', {
     },
   ],
 });
-
-// Relación: Bar pertenece a un User
-Bar.associate = (models) => {
-  Bar.belongsTo(models.User, {
-    foreignKey: 'ownerId',
-    as: 'owner',
-  });
-};
 
 module.exports = Bar;
