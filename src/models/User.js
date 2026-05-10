@@ -20,7 +20,7 @@ const User = sequelize.define('User', {
   email: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true,
+    unique: false,
     validate: { isEmail: true },
   },
   password: {
@@ -54,11 +54,11 @@ const User = sequelize.define('User', {
     allowNull: false,
   },
   documentNumber: {
-    type: DataTypes.STRING(20),
-    field: 'document_number',
-    allowNull: false,
-    unique: true,
-  },
+  type: DataTypes.STRING(20),
+  field: 'document_number',
+  allowNull: false,
+  unique: false,
+},
 }, {
   timestamps: true,
   tableName: 'users',
@@ -79,7 +79,7 @@ User.beforeCreate(async (user) => {
   }
 });
 
-User.prototype.validPassword = async function(password) {
+User.prototype.validPassword = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
 

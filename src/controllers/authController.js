@@ -278,9 +278,17 @@ exports.register = async (req, res) => {
     }
 
     // Verificar si ya existe
-    const existingUser = await User.findOne({ where: { email } });
+    const existingUser = await User.findOne({
+      where: {
+        email: email,
+        role: role === 'owner' ? 'owner' : role  // 'owner' para bar, 'player' para jugador
+      }
+    });
+
     if (existingUser) {
-      return res.status(400).json({ message: 'Email ya registrado' });
+      return res.status(400).json({
+        message: `Ya tienes una cuenta con rol ${role}. Usa otro rol o inicia sesión.`
+      });
     }
 
     // ============ VALIDACIONES PARA JUGADOR ============
