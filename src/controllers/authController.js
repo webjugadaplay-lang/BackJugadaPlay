@@ -72,13 +72,11 @@ const validateCNPJ = (cnpj) => {
   return digit === parseInt(cnpj.charAt(13));
 };
 
-// Validar cédula colombiana - ACEPTA CUALQUIER LONGITUD ENTRE 7 Y 10
+// Validar cédula colombiana
 const validateColombianId = (cedula) => {
   cedula = cedula.replace(/\D/g, '');
-
   if (cedula.length < 7 || cedula.length > 10) return false;
   if (/^0+$/.test(cedula)) return false;
-
   return true;
 };
 
@@ -273,47 +271,9 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'El campo country es requerido (BR, CO, MX)' });
     }
 
-    // ✅ CAMBIO: Verificar si ya existe un usuario con el MISMO email y MISMO rol
-    const existingUser = await User.findOne({
-      where: {
-        email: email,
-        role: role
-      }
-    });
-
-    if (existingUser) {
-      return res.status(400).json({
-        message: `Ya tienes una cuenta con rol ${role}. Usa otro rol o inicia sesión.`
-      });
-    }
-
-    // ============ VALIDACIONES PARA JUGADOR ============
-    if (role === 'player' && documentNumber) {
-      // ✅ CAMBIO: Verificar si el documento ya existe con el MISMO rol
-      const existingDocument = await User.findOne({
-        where: {
-          documentNumber: documentNumber,
-          role: 'player'
-        }
-      });
-      if (existingDocument) {
-        return res.status(400).json({ message: `${documentType} ya registrado como jugador` });
-      }
-
-      const docValidation = validateDocument(documentNumber, documentType, country);
-      if (!docValidation.isValid) {
-        return res.status(400).json({ message: docValidation.message });
-      }
-    }
-
-    // ============ VALIDACIONES PARA OWNER ============
+    // ============ LÓGICA PARA OWNER (BAR) ============
     if (role === 'owner') {
-      if (!documentNumber || !documentType || !country) {
-        return res.status(400).json({
-          message: 'Documento, tipo de documento y país son requeridos para dueños de bar'
-        });
-      }
-
+      // Validar campos requeridos
       if (!barName) {
         return res.status(400).json({ message: 'Nombre del bar es requerido' });
       }
@@ -321,7 +281,80 @@ exports.register = async (req, res) => {
         return res.status(400).json({ message: 'Dirección del bar es requerida' });
       }
 
-      // ✅ CAMBIO: Verificar si el documento ya existe con el MISMO rol (owner)
+      // Buscar si el usuario owner ya existe por email
+      let existingOwner = await User.findOne({
+        where: {
+          email: email,
+          role: 'owner'
+        }
+      });
+
+      if (existingOwner) {
+        // Usuario owner ya existe - solo crear un nuevo bar
+        console.log("Owner existente, creando nuevo bar...");
+
+        // Verificar que no exista un bar con el mismo nombre para este owner
+        const existingBar = await Bar.findOne({
+          where: {
+            ownerId: existingOwner.id,
+            barName: barName
+          }
+        });
+
+        if (existingBar) {
+          return res.status(400).json({
+            message: `Ya tienes un bar con el nombre "${barName}". Usa otro nombre.`
+          });
+        }
+
+        // Crear el nuevo bar
+        const newBar = await Bar.create({
+          ownerId: existingOwner.id,
+          barName: barName,
+          address: address,
+          isActive: true,
+        });
+
+        const token = generateToken(existingOwner);
+
+        // Obtener todos los bares del owner
+        const allBars = await Bar.findAll({
+          where: { ownerId: existingOwner.id },
+          attributes: ['id', 'barName', 'address', 'isActive']
+        });
+
+        return res.status(201).json({
+          message: `Bar "${barName}" registrado exitosamente`,
+          token,
+          user: {
+            id: existingOwner.id,
+            email: existingOwner.email,
+            role: existingOwner.role,
+            name: existingOwner.name,
+            nickname: existingOwner.nickname,
+            country: existingOwner.country,
+          },
+          bar: {
+            id: newBar.id,
+            barName: newBar.barName,
+            address: newBar.address,
+            isActive: newBar.isActive,
+          },
+          allBars: allBars
+        });
+      }
+
+      // Si no existe owner, crear nuevo usuario owner con su primer bar
+      console.log("Nuevo owner, creando usuario y bar...");
+
+      // Validar documento
+      if (!documentNumber || !documentType) {
+        return res.status(400).json({
+          message: 'Documento y tipo de documento son requeridos para nuevo dueño'
+        });
+      }
+
+      // Validar documento único para nuevo owner
       const existingDocument = await User.findOne({
         where: {
           documentNumber: documentNumber,
@@ -336,80 +369,151 @@ exports.register = async (req, res) => {
       if (!docValidation.isValid) {
         return res.status(400).json({ message: docValidation.message });
       }
-    }
 
-    // ============ VALIDAR TELÉFONO ============
-    const phoneValidation = validatePhone(phone, phoneCountry);
-    if (!phoneValidation.isValid) {
-      return res.status(400).json({ message: phoneValidation.message });
-    }
+      // Validar teléfono
+      const phoneValidation = validatePhone(phone, phoneCountry);
+      if (!phoneValidation.isValid) {
+        return res.status(400).json({ message: phoneValidation.message });
+      }
 
-    // ============ LIMPIAR DOCUMENTO ============
-    let cleanDocument = documentNumber;
+      // Limpiar documento
+      let cleanDocument = documentNumber;
+      if (country === 'BR' && documentType === 'CPF') {
+        cleanDocument = documentNumber.replace(/\D/g, '');
+      } else if (country === 'CO' && documentType === 'Cédula') {
+        cleanDocument = documentNumber.replace(/\D/g, '');
+      } else if (country === 'MX') {
+        cleanDocument = documentNumber ? documentNumber.toUpperCase() : null;
+      }
 
-    if (country === 'BR' && documentType === 'CPF') {
-      cleanDocument = documentNumber.replace(/\D/g, '');
-    } else if (country === 'CO' && documentType === 'Cédula') {
-      cleanDocument = documentNumber.replace(/\D/g, '');
-    } else if (country === 'MX') {
-      cleanDocument = documentNumber ? documentNumber.toUpperCase() : null;
-    }
+      // Crear usuario owner
+      const userData = {
+        email,
+        password,
+        role: 'owner',
+        name,
+        nickname: nickname || name,
+        country: country,
+        phoneCountry: phoneCountry,
+        phone: phone ? phone.replace(/\D/g, '') : null,
+        documentType: documentType || null,
+        documentNumber: cleanDocument || null,
+      };
 
-    // ============ CREAR USUARIO ============
-    const userData = {
-      email,
-      password,
-      role: role,
-      name,
-      nickname: nickname || name,
-      country: country,
-      phoneCountry: phoneCountry,
-      phone: phone ? phone.replace(/\D/g, '') : null,
-      documentType: documentType || null,
-      documentNumber: cleanDocument || null,
-    };
+      const user = await User.create(userData);
 
-    console.log("userData a crear:", userData);
-
-    const user = await User.create(userData);
-
-    let newBar = null;
-
-    // Si es owner, crear el bar
-    if (role === 'owner') {
-      newBar = await Bar.create({
+      // Crear su primer bar
+      const newBar = await Bar.create({
         ownerId: user.id,
         barName: barName,
         address: address,
         isActive: true,
       });
+
+      const token = generateToken(user);
+
+      return res.status(201).json({
+        message: 'Bar registrado exitosamente',
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          name: user.name,
+          nickname: user.nickname,
+          country: user.country,
+        },
+        bar: {
+          id: newBar.id,
+          barName: newBar.barName,
+          address: newBar.address,
+          isActive: newBar.isActive,
+        }
+      });
     }
 
-    const token = generateToken(user);
+    // ============ LÓGICA PARA PLAYER ============
+    if (role === 'player') {
+      // Verificar si el jugador ya existe por email
+      const existingPlayer = await User.findOne({
+        where: {
+          email: email,
+          role: 'player'
+        }
+      });
 
-    const responseData = {
-      message: role === 'owner' ? 'Bar registrado exitosamente' : 'Jugador registrado exitosamente',
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        name: user.name,
-        nickname: user.nickname,
-        country: user.country,
+      if (existingPlayer) {
+        return res.status(400).json({
+          message: 'Ya tienes una cuenta como jugador. Inicia sesión.'
+        });
       }
-    };
 
-    if (role === 'owner' && newBar) {
-      responseData.bar = {
-        id: newBar.id,
-        barName: newBar.barName,
-        address: newBar.address,
-        isActive: newBar.isActive,
+      // Validar documento
+      if (documentNumber) {
+        const existingDocument = await User.findOne({
+          where: {
+            documentNumber: documentNumber,
+            role: 'player'
+          }
+        });
+        if (existingDocument) {
+          return res.status(400).json({ message: `${documentType} ya registrado como jugador` });
+        }
+
+        const docValidation = validateDocument(documentNumber, documentType, country);
+        if (!docValidation.isValid) {
+          return res.status(400).json({ message: docValidation.message });
+        }
+      }
+
+      // Validar teléfono
+      const phoneValidation = validatePhone(phone, phoneCountry);
+      if (!phoneValidation.isValid) {
+        return res.status(400).json({ message: phoneValidation.message });
+      }
+
+      // Limpiar documento
+      let cleanDocument = documentNumber;
+      if (country === 'BR' && documentType === 'CPF') {
+        cleanDocument = documentNumber.replace(/\D/g, '');
+      } else if (country === 'CO' && documentType === 'Cédula') {
+        cleanDocument = documentNumber.replace(/\D/g, '');
+      } else if (country === 'MX') {
+        cleanDocument = documentNumber ? documentNumber.toUpperCase() : null;
+      }
+
+      // Crear jugador
+      const userData = {
+        email,
+        password,
+        role: 'player',
+        name,
+        nickname: nickname || name,
+        country: country,
+        phoneCountry: phoneCountry,
+        phone: phone ? phone.replace(/\D/g, '') : null,
+        documentType: documentType || null,
+        documentNumber: cleanDocument || null,
       };
+
+      const user = await User.create(userData);
+      const token = generateToken(user);
+
+      return res.status(201).json({
+        message: 'Jugador registrado exitosamente',
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          name: user.name,
+          nickname: user.nickname,
+          country: user.country,
+        }
+      });
     }
 
-    res.status(201).json(responseData);
+    return res.status(400).json({ message: 'Rol no válido' });
 
   } catch (error) {
     console.error('Error en registro:', error);
