@@ -76,13 +76,10 @@ const validateCNPJ = (cnpj) => {
 const validateColombianId = (cedula) => {
   cedula = cedula.replace(/\D/g, '');
 
-  // Aceptar cualquier longitud entre 7 y 10 dígitos
   if (cedula.length < 7 || cedula.length > 10) return false;
-
-  // No puede ser todos ceros
   if (/^0+$/.test(cedula)) return false;
 
-  return true; // ✅ Acepta 7, 8, 9 o 10 dígitos
+  return true;
 };
 
 // Validar NIT colombiano
@@ -93,21 +90,21 @@ const validateNIT = (nit) => {
   return true;
 };
 
-// Validar RFC Persona Moral mexicano (12 caracteres: 3 letras + 6 números + 3 caracteres)
+// Validar RFC Persona Moral mexicano
 const validateRFCPersonaMoral = (rfc) => {
   rfc = rfc.toUpperCase();
   const rfcRegex = /^[A-ZÑ&]{3}[0-9]{6}[A-Z0-9]{3}$/;
   return rfcRegex.test(rfc);
 };
 
-// Validar RFC Persona Física mexicano (13 caracteres: 4 letras + 6 números + 3 caracteres)
+// Validar RFC Persona Física mexicano
 const validateRFCPersonaFisica = (rfc) => {
   rfc = rfc.toUpperCase();
   const rfcRegex = /^[A-ZÑ&]{4}[0-9]{6}[A-Z0-9]{3}$/;
   return rfcRegex.test(rfc);
 };
 
-// Validar CURP mexicana (18 caracteres)
+// Validar CURP mexicana
 const validateCURP = (curp) => {
   curp = curp.toUpperCase();
   const curpRegex = /^[A-Z]{4}[0-9]{6}[A-Z]{6}[0-9]{2}$/;
@@ -189,15 +186,15 @@ const validateBarDocument = (documentNumber, documentType, countryCode) => {
     case 'MX':
       if (documentType === 'RFC Persona Moral') {
         if (!validateRFCPersonaMoral(documentNumber)) {
-          return { isValid: false, message: 'RFC Persona Moral inválido. Debe tener 12 caracteres (3 letras + 6 números + 3 caracteres)' };
+          return { isValid: false, message: 'RFC Persona Moral inválido' };
         }
       } else if (documentType === 'RFC Persona Física') {
         if (!validateRFCPersonaFisica(documentNumber)) {
-          return { isValid: false, message: 'RFC Persona Física inválido. Debe tener 13 caracteres (4 letras + 6 números + 3 caracteres)' };
+          return { isValid: false, message: 'RFC Persona Física inválido' };
         }
       } else if (documentType === 'CURP') {
         if (!validateCURP(documentNumber)) {
-          return { isValid: false, message: 'CURP inválida. Debe tener 18 caracteres' };
+          return { isValid: false, message: 'CURP inválida' };
         }
       } else {
         return { isValid: false, message: 'Tipo de documento inválido para México' };
@@ -265,23 +262,22 @@ exports.register = async (req, res) => {
       documentType,
       documentNumber,
       country,
-      barName,    // ← NUEVO: nombre del bar
-      address     // ← NUEVO: dirección del bar
+      barName,
+      address
     } = req.body;
 
     console.log("=== DATOS RECIBIDOS ===");
     console.log({ email, role, name, country, phoneCountry, documentType, barName, address });
 
-    // Verificar campos requeridos
     if (!country) {
       return res.status(400).json({ message: 'El campo country es requerido (BR, CO, MX)' });
     }
 
-    // Verificar si ya existe
+    // ✅ CAMBIO: Verificar si ya existe un usuario con el MISMO email y MISMO rol
     const existingUser = await User.findOne({
       where: {
         email: email,
-        role: role === 'owner' ? 'owner' : role  // 'owner' para bar, 'player' para jugador
+        role: role
       }
     });
 
@@ -293,9 +289,15 @@ exports.register = async (req, res) => {
 
     // ============ VALIDACIONES PARA JUGADOR ============
     if (role === 'player' && documentNumber) {
-      const existingDocument = await User.findOne({ where: { documentNumber } });
+      // ✅ CAMBIO: Verificar si el documento ya existe con el MISMO rol
+      const existingDocument = await User.findOne({
+        where: {
+          documentNumber: documentNumber,
+          role: 'player'
+        }
+      });
       if (existingDocument) {
-        return res.status(400).json({ message: `${documentType} ya registrado` });
+        return res.status(400).json({ message: `${documentType} ya registrado como jugador` });
       }
 
       const docValidation = validateDocument(documentNumber, documentType, country);
@@ -312,7 +314,6 @@ exports.register = async (req, res) => {
         });
       }
 
-      // Validar que llegaron los campos del bar
       if (!barName) {
         return res.status(400).json({ message: 'Nombre del bar es requerido' });
       }
@@ -320,9 +321,15 @@ exports.register = async (req, res) => {
         return res.status(400).json({ message: 'Dirección del bar es requerida' });
       }
 
-      const existingDocument = await User.findOne({ where: { documentNumber } });
+      // ✅ CAMBIO: Verificar si el documento ya existe con el MISMO rol (owner)
+      const existingDocument = await User.findOne({
+        where: {
+          documentNumber: documentNumber,
+          role: 'owner'
+        }
+      });
       if (existingDocument) {
-        return res.status(400).json({ message: `${documentType} ya registrado` });
+        return res.status(400).json({ message: `${documentType} ya registrado como dueño de bar` });
       }
 
       const docValidation = validateBarDocument(documentNumber, documentType, country);
@@ -352,7 +359,7 @@ exports.register = async (req, res) => {
     const userData = {
       email,
       password,
-      role: role === 'owner' ? 'owner' : role,
+      role: role,
       name,
       nickname: nickname || name,
       country: country,
@@ -393,7 +400,6 @@ exports.register = async (req, res) => {
       }
     };
 
-    // Si es owner, agregar info del bar
     if (role === 'owner' && newBar) {
       responseData.bar = {
         id: newBar.id,
@@ -426,7 +432,6 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
-    // Si es owner, obtener sus bares
     let bars = [];
     if (user.role === 'owner') {
       bars = await Bar.findAll({
@@ -453,7 +458,6 @@ exports.login = async (req, res) => {
       }
     };
 
-    // Si es owner, agregar lista de bares
     if (bars.length > 0) {
       responseData.bars = bars;
     }
