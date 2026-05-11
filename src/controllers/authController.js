@@ -7,72 +7,25 @@ const PasswordResetToken = require('../models/PasswordResetToken');
 const { sendPasswordResetEmail } = require('../services/emailService');
 const jwt = require('jsonwebtoken');
 
-// ============ NUEVAS FUNCIONES DE VALIDACIÓN ============
+// ============ VALIDACIONES SIMPLIFICADAS ============
 
-// Validar CPF brasileño (con dígitos verificadores)
+// Validar CPF brasileño - Solo verifica longitud y que no sean todos dígitos iguales
 const validateCPF = (cpf) => {
   cpf = cpf.replace(/\D/g, '');
   if (cpf.length !== 11) return false;
-
-  const invalidCPFs = [
-    '00000000000', '11111111111', '22222222222', '33333333333',
-    '44444444444', '55555555555', '66666666666', '77777777777',
-    '88888888888', '99999999999'
-  ];
-  if (invalidCPFs.includes(cpf)) return false;
-
-  let sum = 0;
-  for (let i = 0; i < 9; i++) {
-    sum += parseInt(cpf.charAt(i)) * (10 - i);
-  }
-  let digit = 11 - (sum % 11);
-  if (digit >= 10) digit = 0;
-  if (digit !== parseInt(cpf.charAt(9))) return false;
-
-  sum = 0;
-  for (let i = 0; i < 10; i++) {
-    sum += parseInt(cpf.charAt(i)) * (11 - i);
-  }
-  digit = 11 - (sum % 11);
-  if (digit >= 10) digit = 0;
-  return digit === parseInt(cpf.charAt(10));
+  if (/^(\d)\1{10}$/.test(cpf)) return false; // 111.111.111-11, etc.
+  return true;
 };
 
-// Validar CNPJ brasileño
+// Validar CNPJ brasileño - Solo verifica longitud y que no sean todos dígitos iguales
 const validateCNPJ = (cnpj) => {
   cnpj = cnpj.replace(/\D/g, '');
   if (cnpj.length !== 14) return false;
-
-  const invalidCNPJs = [
-    '00000000000000', '11111111111111', '22222222222222',
-    '33333333333333', '44444444444444', '55555555555555',
-    '66666666666666', '77777777777777', '88888888888888',
-    '99999999999999'
-  ];
-  if (invalidCNPJs.includes(cnpj)) return false;
-
-  let sum = 0;
-  let factor = 5;
-  for (let i = 0; i < 12; i++) {
-    sum += parseInt(cnpj.charAt(i)) * factor;
-    factor = factor === 2 ? 9 : factor - 1;
-  }
-  let digit = sum % 11;
-  digit = digit < 2 ? 0 : 11 - digit;
-  if (digit !== parseInt(cnpj.charAt(12))) return false;
-
-  sum = 0;
-  factor = 6;
-  for (let i = 0; i < 13; i++) {
-    sum += parseInt(cnpj.charAt(i)) * factor;
-    factor = factor === 2 ? 9 : factor - 1;
-  }
-  digit = sum % 11;
-  digit = digit < 2 ? 0 : 11 - digit;
-  return digit === parseInt(cnpj.charAt(13));
+  if (/^(\d)\1{13}$/.test(cnpj)) return false;
+  return true;
 };
 
-// Validar cédula colombiana
+// Validar cédula colombiana - Solo verifica longitud entre 7 y 10
 const validateColombianId = (cedula) => {
   cedula = cedula.replace(/\D/g, '');
   if (cedula.length < 7 || cedula.length > 10) return false;
@@ -80,7 +33,7 @@ const validateColombianId = (cedula) => {
   return true;
 };
 
-// Validar NIT colombiano
+// Validar NIT colombiano - Solo verifica 10 dígitos
 const validateNIT = (nit) => {
   nit = nit.replace(/\D/g, '');
   if (nit.length !== 10) return false;
@@ -88,25 +41,22 @@ const validateNIT = (nit) => {
   return true;
 };
 
-// Validar RFC Persona Moral mexicano
+// Validar RFC Persona Moral mexicano - Solo verifica 12 caracteres alfanuméricos
 const validateRFCPersonaMoral = (rfc) => {
-  rfc = rfc.toUpperCase();
-  const rfcRegex = /^[A-ZÑ&]{3}[0-9]{6}[A-Z0-9]{3}$/;
-  return rfcRegex.test(rfc);
+  rfc = rfc.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return rfc.length === 12;
 };
 
-// Validar RFC Persona Física mexicano
+// Validar RFC Persona Física mexicano - Solo verifica 13 caracteres alfanuméricos
 const validateRFCPersonaFisica = (rfc) => {
-  rfc = rfc.toUpperCase();
-  const rfcRegex = /^[A-ZÑ&]{4}[0-9]{6}[A-Z0-9]{3}$/;
-  return rfcRegex.test(rfc);
+  rfc = rfc.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return rfc.length === 13;
 };
 
-// Validar CURP mexicana
+// Validar CURP mexicana - Solo verifica 18 caracteres alfanuméricos
 const validateCURP = (curp) => {
-  curp = curp.toUpperCase();
-  const curpRegex = /^[A-Z]{4}[0-9]{6}[A-Z]{6}[0-9]{2}$/;
-  return curpRegex.test(curp);
+  curp = curp.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return curp.length === 18;
 };
 
 // Validar documento según país (para JUGADOR)
@@ -155,11 +105,13 @@ const validateBarDocument = (documentNumber, documentType, countryCode) => {
   switch (countryCode) {
     case 'BR':
       if (documentType === 'CNPJ') {
-        if (!validateCNPJ(documentNumber)) {
+        const cleanCNPJ = documentNumber.replace(/\D/g, '');
+        if (!validateCNPJ(cleanCNPJ)) {
           return { isValid: false, message: 'CNPJ inválido' };
         }
       } else if (documentType === 'CPF') {
-        if (!validateCPF(documentNumber)) {
+        const cleanCPF = documentNumber.replace(/\D/g, '');
+        if (!validateCPF(cleanCPF)) {
           return { isValid: false, message: 'CPF inválido' };
         }
       } else {
@@ -235,7 +187,7 @@ const validatePhone = (phone, phoneCountry) => {
   return { isValid: true, message: '' };
 };
 
-// ============ FIN NUEVAS FUNCIONES ============
+// ============ FIN VALIDACIONES ============
 
 // Generar token JWT
 const generateToken = (user) => {
@@ -264,18 +216,12 @@ exports.register = async (req, res) => {
       address
     } = req.body;
 
-    console.log("=== DATOS RECIBIDOS ===");
-    console.log({ email, role, name, nickname, phone, phoneCountry, documentType, documentNumber, country, barName, address});
-
     if (!country) {
       return res.status(400).json({ message: 'El campo country es requerido (BR, CO, MX)' });
     }
 
     // ============ LÓGICA PARA OWNER (BAR) ============
-    // Acepta tanto 'owner' como 'bar' como rol válido para dueño de bar
     if (role === 'owner' || role === 'bar') {
-      // Normalizar el rol a 'owner' internamente
-      const internalRole = 'owner';
 
       // Validar campos requeridos
       if (!barName) {
@@ -333,7 +279,7 @@ exports.register = async (req, res) => {
           user: {
             id: existingOwner.id,
             email: existingOwner.email,
-            role: 'bar', // Devolver 'bar' para que el frontend funcione
+            role: 'bar',
             name: existingOwner.name,
             nickname: existingOwner.nickname,
             country: existingOwner.country,
@@ -382,15 +328,15 @@ exports.register = async (req, res) => {
 
       // Limpiar documento
       let cleanDocument = documentNumber;
-      if (country === 'BR' && documentType === 'CPF') {
+      if (country === 'BR' && (documentType === 'CPF' || documentType === 'CNPJ')) {
         cleanDocument = documentNumber.replace(/\D/g, '');
-      } else if (country === 'CO' && documentType === 'Cédula') {
+      } else if (country === 'CO' && (documentType === 'Cédula' || documentType === 'NIT')) {
         cleanDocument = documentNumber.replace(/\D/g, '');
       } else if (country === 'MX') {
-        cleanDocument = documentNumber ? documentNumber.toUpperCase() : null;
+        cleanDocument = documentNumber ? documentNumber.toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
       }
 
-      // Crear usuario owner (internamente con role 'owner')
+      // Crear usuario owner
       const userData = {
         email,
         password,
@@ -422,7 +368,7 @@ exports.register = async (req, res) => {
         user: {
           id: user.id,
           email: user.email,
-          role: 'bar', // Devolver 'bar' para que el frontend funcione
+          role: 'bar',
           name: user.name,
           nickname: user.nickname,
           country: user.country,
@@ -483,7 +429,7 @@ exports.register = async (req, res) => {
       } else if (country === 'CO' && documentType === 'Cédula') {
         cleanDocument = documentNumber.replace(/\D/g, '');
       } else if (country === 'MX') {
-        cleanDocument = documentNumber ? documentNumber.toUpperCase() : null;
+        cleanDocument = documentNumber ? documentNumber.toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
       }
 
       // Crear jugador
@@ -562,7 +508,7 @@ exports.login = async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        role: role, // Devolver el rol que el frontend espera ('bar' o 'player')
+        role: role,
         name: user.name,
         nickname: user.nickname,
         phone: user.phone,
