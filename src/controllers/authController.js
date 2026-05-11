@@ -265,7 +265,7 @@ exports.register = async (req, res) => {
     } = req.body;
 
     console.log("=== DATOS RECIBIDOS ===");
-    console.log({ email, role, name, country, phoneCountry, documentType, barName, address });
+    console.log({ email, role, name, nickname, phone, phoneCountry, documentType, documentNumber, country, barName, address});
 
     if (!country) {
       return res.status(400).json({ message: 'El campo country es requerido (BR, CO, MX)' });
