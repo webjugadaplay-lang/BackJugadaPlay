@@ -272,7 +272,11 @@ exports.register = async (req, res) => {
     }
 
     // ============ LÓGICA PARA OWNER (BAR) ============
-    if (role === 'owner') {
+    // Acepta tanto 'owner' como 'bar' como rol válido para dueño de bar
+    if (role === 'owner' || role === 'bar') {
+      // Normalizar el rol a 'owner' internamente
+      const internalRole = 'owner';
+
       // Validar campos requeridos
       if (!barName) {
         return res.status(400).json({ message: 'Nombre del bar es requerido' });
@@ -329,7 +333,7 @@ exports.register = async (req, res) => {
           user: {
             id: existingOwner.id,
             email: existingOwner.email,
-            role: existingOwner.role,
+            role: 'bar', // Devolver 'bar' para que el frontend funcione
             name: existingOwner.name,
             nickname: existingOwner.nickname,
             country: existingOwner.country,
@@ -386,7 +390,7 @@ exports.register = async (req, res) => {
         cleanDocument = documentNumber ? documentNumber.toUpperCase() : null;
       }
 
-      // Crear usuario owner
+      // Crear usuario owner (internamente con role 'owner')
       const userData = {
         email,
         password,
@@ -418,7 +422,7 @@ exports.register = async (req, res) => {
         user: {
           id: user.id,
           email: user.email,
-          role: user.role,
+          role: 'bar', // Devolver 'bar' para que el frontend funcione
           name: user.name,
           nickname: user.nickname,
           country: user.country,
@@ -524,9 +528,15 @@ exports.register = async (req, res) => {
 // Login
 exports.login = async (req, res) => {
   try {
-    const { email, password, role } = req.body;
+    let { email, password, role } = req.body;
 
-    const user = await User.findOne({ where: { email, role } });
+    // Normalizar rol: si viene 'bar', buscamos 'owner' en la BD
+    let dbRole = role;
+    if (role === 'bar') {
+      dbRole = 'owner';
+    }
+
+    const user = await User.findOne({ where: { email, role: dbRole } });
     if (!user) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
@@ -552,7 +562,7 @@ exports.login = async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        role: user.role,
+        role: role, // Devolver el rol que el frontend espera ('bar' o 'player')
         name: user.name,
         nickname: user.nickname,
         phone: user.phone,
