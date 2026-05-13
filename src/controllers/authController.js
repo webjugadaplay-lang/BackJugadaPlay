@@ -497,36 +497,49 @@ exports.login = async (req, res) => {
     if (user.role === 'owner') {
       bars = await Bar.findAll({
         where: { ownerId: user.id },
-        attributes: ['id', 'barName', 'address', 'isActive']
+        attributes: ['id', 'barName', 'address', 'isActive', 'balance'],
+        order: [['createdAt', 'ASC']]
       });
     }
 
     const token = generateToken(user);
 
+    // 🔥 IMPORTANTE: Preparar el objeto user con todos los datos
+    const userResponse = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      nickname: user.nickname,
+      phone: user.phone,
+      phoneCountry: user.phoneCountry,
+      country: user.country,
+      documentType: user.documentType,
+    };
+
+    // 🔥 AGREGAR LOS BARES AL OBJETO USER
+    if (bars.length > 0) {
+      userResponse.bars = bars.map(bar => ({
+        id: bar.id,
+        barName: bar.barName,
+        name: bar.barName,
+        address: bar.address,
+        isActive: bar.isActive,
+        balance: parseFloat(bar.balance) || 0
+      }));
+      userResponse.barId = bars[0].id;
+      userResponse.barName = bars[0].barName;
+    }
+
     const responseData = {
       message: 'Login exitoso',
       token,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role, // ✅ CAMBIADO: usar el rol real de la BD
-        name: user.name,
-        nickname: user.nickname,
-        phone: user.phone,
-        phoneCountry: user.phoneCountry,
-        country: user.country,
-        documentType: user.documentType,
-      }
+      user: userResponse,
     };
 
+    // También mantener bars en la raíz por compatibilidad
     if (bars.length > 0) {
       responseData.bars = bars;
-      // ✅ Si es owner, también podemos incluir el primer bar por defecto
-      if (bars.length > 0) {
-        responseData.bars = bars;
-        responseData.user.barId = bars[0].id;
-        responseData.user.barName = bars[0].barName;
-      }
     }
 
     res.json(responseData);
