@@ -407,7 +407,7 @@ exports.getOwnerBars = async (req, res) => {
     // Obtener todos los bares del owner
     const bars = await Bar.findAll({
       where: { ownerId: userId },
-      attributes: ['id', 'barName', 'address', 'isActive', 'balance'],
+      attributes: ['id', 'barName', 'address', 'isActive'],
       order: [['createdAt', 'ASC']]
     });
 

@@ -497,7 +497,7 @@ exports.login = async (req, res) => {
     if (user.role === 'owner') {
       bars = await Bar.findAll({
         where: { ownerId: user.id },
-        attributes: ['id', 'barName', 'address', 'isActive', 'balance'],
+        attributes: ['id', 'barName', 'address', 'isActive'],
         order: [['createdAt', 'ASC']]
       });
     }
