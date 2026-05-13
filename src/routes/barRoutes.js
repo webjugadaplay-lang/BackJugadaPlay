@@ -1,3 +1,4 @@
+//src/routes/barRoutes.js
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
@@ -6,12 +7,13 @@ const barController = require('../controllers/barController');
 // Todas las rutas requieren autenticación
 router.use(authMiddleware);
 
-// Verificar que el usuario es un bar
+// 🔥 MODIFICADO: Permitir tanto 'bar' como 'owner'
 router.use((req, res, next) => {
-  if (req.user.role !== 'bar') {
+  // Permitir acceso a owners y bares
+  if (req.user.role !== 'bar' && req.user.role !== 'owner') {
     return res.status(403).json({
       success: false,
-      message: 'Acceso denegado. Se requiere rol de bar.',
+      message: 'Acceso denegado. Se requiere rol de bar o owner.',
     });
   }
   next();
@@ -23,6 +25,6 @@ router.get('/rooms', barController.getBarRooms);
 router.post('/rooms', barController.createRoom);
 router.get('/rooms/:id', barController.getRoomDetails);
 router.put('/rooms/:id/close', barController.closePredictions);
-router.get('/owner/bars', authMiddleware, barController.getOwnerBars);
+router.get('/owner/bars', barController.getOwnerBars);
 
 module.exports = router;

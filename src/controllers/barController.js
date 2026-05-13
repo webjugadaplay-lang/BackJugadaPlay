@@ -1,54 +1,119 @@
-// Crear nueva sala
+//src/controllers/barController.js
 const Room = require('../models/Room');
 const Prediction = require('../models/Prediction');
 const Payment = require('../models/Payment');
 const User = require('../models/User');
+const Bar = require('../models/Bar'); // 🔥 IMPORTANTE: Agregar esta línea
 const { Sequelize } = require('sequelize');
+const { Op } = require('sequelize');
 
-// Obtener estadísticas del bar
+// Obtener estadísticas del bar (ahora acepta barId por query)
 exports.getBarStats = async (req, res) => {
   try {
-    const barId = req.user.id;
+    const { barId } = req.query;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    let targetBarId = barId;
+    
+    // Si el usuario es bar (rol 'bar'), usar su ID como barId
+    if (userRole === 'bar') {
+      targetBarId = userId;
+    }
+    
+    if (!targetBarId) {
+      return res.status(400).json({
+        success: false,
+        message: 'barId es requerido para owners'
+      });
+    }
+    
+    // Verificar que el bar pertenece al owner (si es owner)
+    if (userRole === 'owner') {
+      const bar = await Bar.findOne({
+        where: { id: targetBarId, ownerId: userId }
+      });
+      if (!bar) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para ver este bar'
+        });
+      }
+    }
     
     // Obtener datos del bar
-    const bar = await User.findByPk(barId);
+    const bar = await Bar.findByPk(targetBarId);
+    if (!bar) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bar no encontrado'
+      });
+    }
     
-    // Salas activas del bar
+    // Contar salas activas
     const activeRooms = await Room.count({
       where: {
-        bar_id: barId,
+        bar_id: targetBarId,
         status: 'active',
+        match_date: { [Op.gte]: new Date() }
       },
     });
     
-    // Total de jugadores que participaron en salas del bar (simplificado)
+    // Contar jugadores únicos
     const totalPlayers = await Prediction.count({
-      where: {},
+      distinct: true,
+      col: 'user_id',
+      include: [{
+        model: Room,
+        where: { bar_id: targetBarId }
+      }]
     });
     
-    // Total de predicciones pagadas (simplificado)
-    const totalRevenue = 0;
+    // Calcular recaudado hoy
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
     
-    // Ranking de jugadores (simplificado)
+    const todayRevenueResult = await Prediction.sum('entry_fee', {
+      include: [{
+        model: Room,
+        where: { bar_id: targetBarId }
+      }],
+      where: {
+        created_at: { [Op.gte]: today, [Op.lt]: tomorrow }
+      }
+    });
+    const todayRevenue = todayRevenueResult || 0;
+    
+    // Total recaudado
+    const totalRevenueResult = await Prediction.sum('entry_fee', {
+      include: [{
+        model: Room,
+        where: { bar_id: targetBarId }
+      }]
+    });
+    const totalRevenue = totalRevenueResult || 0;
+    
+    // Ranking (simplificado por ahora)
     const ranking = [
-      { name: 'Jugador 1', predictions: 0 },
-      { name: 'Jugador 2', predictions: 0 },
-      { name: 'Jugador 3', predictions: 0 },
+      { name: 'Sin datos', predictions: 0 }
     ];
     
     res.json({
       success: true,
       data: {
         bar: {
-          name: bar.bar_name || bar.name,
-          balance: 0,
+          name: bar.barName,
+          bar_name: bar.barName,
+          balance: parseFloat(bar.balance) || 0,
         },
         stats: {
           activeRooms,
           totalPlayers,
-          todayRevenue: 0,
-          totalRevenue: totalRevenue || 0,
-          rating: 4.8,
+          todayRevenue,
+          totalRevenue,
+          rating: 4.5,
         },
         ranking,
       },
@@ -62,15 +127,49 @@ exports.getBarStats = async (req, res) => {
   }
 };
 
-// Obtener salas del bar
+// Obtener salas del bar (ahora acepta barId por query)
 exports.getBarRooms = async (req, res) => {
   try {
-    const barId = req.user.id;
-    const { status } = req.query;
+    const { barId, status } = req.query;
+    const userId = req.user.id;
+    const userRole = req.user.role;
     
-    const where = { bar_id: barId };
-    if (status && status !== 'upcoming') {
-      where.status = status;
+    let targetBarId = barId;
+    
+    // Si el usuario es bar, usar su ID
+    if (userRole === 'bar') {
+      targetBarId = userId;
+    }
+    
+    if (!targetBarId) {
+      return res.status(400).json({
+        success: false,
+        message: 'barId es requerido para owners'
+      });
+    }
+    
+    // Verificar permisos para owner
+    if (userRole === 'owner') {
+      const bar = await Bar.findOne({
+        where: { id: targetBarId, ownerId: userId }
+      });
+      if (!bar) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para ver este bar'
+        });
+      }
+    }
+    
+    const where = { bar_id: targetBarId };
+    const now = new Date();
+    
+    if (status === 'active') {
+      where.match_date = { [Op.gte]: now };
+      where.status = 'active';
+    } else if (status === 'upcoming') {
+      where.match_date = { [Op.gt]: now };
+      where.status = 'pending';
     }
     
     const rooms = await Room.findAll({
@@ -78,14 +177,22 @@ exports.getBarRooms = async (req, res) => {
       order: [['match_date', 'ASC']],
     });
     
-    // Formatear datos
-    const formattedRooms = rooms.map(room => ({
-      id: room.id,
-      partido: `${room.team_home} vs ${room.team_away}`,
-      fecha: room.match_date,
-      jugadores: 0, // Por ahora 0, luego se contará de predictions
-      pozo: room.total_pool || 0,
-      status: room.status,
+    // Formatear datos y contar jugadores
+    const formattedRooms = await Promise.all(rooms.map(async (room) => {
+      const playerCount = await Prediction.count({
+        distinct: true,
+        col: 'user_id',
+        where: { room_id: room.id }
+      });
+      
+      return {
+        id: room.id,
+        partido: `${room.team_home} vs ${room.team_away}`,
+        fecha: room.match_date,
+        jugadores: playerCount,
+        pozo: room.total_pool || 0,
+        status: room.status,
+      };
     }));
     
     res.json({
@@ -101,20 +208,39 @@ exports.getBarRooms = async (req, res) => {
   }
 };
 
-// Crear nueva sala
+// Crear nueva sala (modificado para usar barId del body)
 exports.createRoom = async (req, res) => {
   try {
-    const barId = req.user.id;
-    const {
-      name,
-      sport,
-      tournament,
-      team_home,
-      team_away,
-      match_date,
-      prediction_close_time,
-      entry_fee,
-    } = req.body;
+    const { barId, name, sport, tournament, team_home, team_away, match_date, prediction_close_time, entry_fee } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    let targetBarId = barId;
+    
+    // Si es bar, usar su ID
+    if (userRole === 'bar') {
+      targetBarId = userId;
+    }
+    
+    if (!targetBarId) {
+      return res.status(400).json({
+        success: false,
+        message: 'barId es requerido'
+      });
+    }
+    
+    // Verificar que el bar pertenece al owner
+    if (userRole === 'owner') {
+      const bar = await Bar.findOne({
+        where: { id: targetBarId, ownerId: userId }
+      });
+      if (!bar) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para crear salas en este bar'
+        });
+      }
+    }
     
     // Validaciones
     if (!team_home || !team_away || !match_date) {
@@ -126,7 +252,7 @@ exports.createRoom = async (req, res) => {
     
     // Crear la sala
     const room = await Room.create({
-      bar_id: barId,
+      bar_id: targetBarId,
       name: name || `${team_home} vs ${team_away}`,
       sport: sport || 'Fútbol',
       tournament: tournament || 'Partido Amistoso',
@@ -162,16 +288,33 @@ exports.createRoom = async (req, res) => {
 exports.getRoomDetails = async (req, res) => {
   try {
     const { id } = req.params;
-    const barId = req.user.id;
+    const userId = req.user.id;
+    const userRole = req.user.role;
     
-    const room = await Room.findOne({
-      where: { id, bar_id: barId },
-    });
+    const room = await Room.findByPk(id);
     
     if (!room) {
       return res.status(404).json({
         success: false,
         message: 'Sala no encontrada',
+      });
+    }
+    
+    // Verificar permisos
+    if (userRole === 'owner') {
+      const bar = await Bar.findOne({
+        where: { id: room.bar_id, ownerId: userId }
+      });
+      if (!bar) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para ver esta sala'
+        });
+      }
+    } else if (userRole === 'bar' && room.bar_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tienes permiso para ver esta sala'
       });
     }
     
@@ -202,16 +345,33 @@ exports.getRoomDetails = async (req, res) => {
 exports.closePredictions = async (req, res) => {
   try {
     const { id } = req.params;
-    const barId = req.user.id;
+    const userId = req.user.id;
+    const userRole = req.user.role;
     
-    const room = await Room.findOne({
-      where: { id, bar_id: barId },
-    });
+    const room = await Room.findByPk(id);
     
     if (!room) {
       return res.status(404).json({
         success: false,
         message: 'Sala no encontrada',
+      });
+    }
+    
+    // Verificar permisos
+    if (userRole === 'owner') {
+      const bar = await Bar.findOne({
+        where: { id: room.bar_id, ownerId: userId }
+      });
+      if (!bar) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para cerrar esta sala'
+        });
+      }
+    } else if (userRole === 'bar' && room.bar_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tienes permiso para cerrar esta sala'
       });
     }
     
@@ -230,10 +390,10 @@ exports.closePredictions = async (req, res) => {
   }
 };
 
-// En tu controlador de bars (ej: barController.js o similar)
+// Obtener todos los bares del owner
 exports.getOwnerBars = async (req, res) => {
   try {
-    const userId = req.user.id; // Asumiendo que tienes middleware de autenticación
+    const userId = req.user.id;
     const userRole = req.user.role;
 
     // Verificar que el usuario es owner
@@ -259,7 +419,7 @@ exports.getOwnerBars = async (req, res) => {
         bar_name: bar.barName,
         address: bar.address,
         isActive: bar.isActive,
-        balance: bar.balance || 0
+        balance: parseFloat(bar.balance) || 0
       }))
     });
 

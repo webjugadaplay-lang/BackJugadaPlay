@@ -1,3 +1,4 @@
+//src/controllers/authControllers.js
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const { Sequelize } = require('sequelize');
@@ -525,8 +526,6 @@ exports.login = async (req, res) => {
         responseData.bars = bars;
         responseData.user.barId = bars[0].id;
         responseData.user.barName = bars[0].barName;
-        responseData.user.barName = bars[0].barName;
-        responseData.user.barId = bars[0].id;
       }
     }
 
