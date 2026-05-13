@@ -508,7 +508,7 @@ exports.login = async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        role: role,
+        role: user.role, // ✅ CAMBIADO: usar el rol real de la BD
         name: user.name,
         nickname: user.nickname,
         phone: user.phone,
@@ -520,6 +520,11 @@ exports.login = async (req, res) => {
 
     if (bars.length > 0) {
       responseData.bars = bars;
+      // ✅ Si es owner, también podemos incluir el primer bar por defecto
+      if (bars.length > 0) {
+        responseData.user.barName = bars[0].barName;
+        responseData.user.barId = bars[0].id;
+      }
     }
 
     res.json(responseData);
