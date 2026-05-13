@@ -522,6 +522,9 @@ exports.login = async (req, res) => {
       responseData.bars = bars;
       // ✅ Si es owner, también podemos incluir el primer bar por defecto
       if (bars.length > 0) {
+        responseData.bars = bars;
+        responseData.user.barId = bars[0].id;
+        responseData.user.barName = bars[0].barName;
         responseData.user.barName = bars[0].barName;
         responseData.user.barId = bars[0].id;
       }

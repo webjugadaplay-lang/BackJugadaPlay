@@ -229,3 +229,45 @@ exports.closePredictions = async (req, res) => {
     });
   }
 };
+
+// En tu controlador de bars (ej: barController.js o similar)
+exports.getOwnerBars = async (req, res) => {
+  try {
+    const userId = req.user.id; // Asumiendo que tienes middleware de autenticación
+    const userRole = req.user.role;
+
+    // Verificar que el usuario es owner
+    if (userRole !== 'owner') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Acceso denegado. Solo owners pueden ver sus bares.' 
+      });
+    }
+
+    // Obtener todos los bares del owner
+    const bars = await Bar.findAll({
+      where: { ownerId: userId },
+      attributes: ['id', 'barName', 'address', 'isActive', 'balance'],
+      order: [['createdAt', 'ASC']]
+    });
+
+    return res.status(200).json({
+      success: true,
+      bars: bars.map(bar => ({
+        id: bar.id,
+        name: bar.barName,
+        bar_name: bar.barName,
+        address: bar.address,
+        isActive: bar.isActive,
+        balance: bar.balance || 0
+      }))
+    });
+
+  } catch (error) {
+    console.error('Error en getOwnerBars:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error al cargar los bares' 
+    });
+  }
+};

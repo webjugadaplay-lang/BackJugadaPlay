@@ -23,5 +23,6 @@ router.get('/rooms', barController.getBarRooms);
 router.post('/rooms', barController.createRoom);
 router.get('/rooms/:id', barController.getRoomDetails);
 router.put('/rooms/:id/close', barController.closePredictions);
+router.get('/owner/bars', authMiddleware, barController.getOwnerBars);
 
 module.exports = router;
