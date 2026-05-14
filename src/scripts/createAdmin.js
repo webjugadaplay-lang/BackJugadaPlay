@@ -19,9 +19,14 @@ async function createAdmin() {
 
     await User.create({
       email,
-      password, // Sequelize lo encripta automáticamente
+      password,
       role: 'admin',
-      name: 'Administrador'
+      name: 'Victor Alejandro Vidal Silva',
+      country: 'BR',
+      phoneCountry: '+55',
+      phone: '99991103471',
+      documentType: 'CPF',
+      documentNumber: '13374449360'
     });
 
     console.log('Admin creado correctamente');
