@@ -7,7 +7,7 @@ const createAdmin = require('./scripts/createAdmin');
 // Importar modelos
 const User = require('./models/User');
 const PasswordResetToken = require('./models/PasswordResetToken');
-const Country = require('./models/Country');
+const Fixture = require('./models/Fixture');
 
 // Importar rutas
 const authRoutes = require('./routes/authRoutes');
