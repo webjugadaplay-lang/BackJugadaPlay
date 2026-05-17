@@ -7,22 +7,23 @@ const createAdmin = require('./scripts/createAdmin');
 // Importar modelos
 const User = require('./models/User');
 const PasswordResetToken = require('./models/PasswordResetToken');
+const FootballMatch = require('./models/FootballMatch');
 
 // Importar rutas
 const authRoutes = require('./routes/authRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
-//const PORT = process.env.PORT || 3001;
 const PORT = process.env.PORT || 10000; // Render espera 10000 por defecto
 
 // Middlewares
 app.use(cors());
 app.use(express.json());
-
 app.use(express.static('public'));
 
 // Rutas
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Ruta de prueba
 app.get('/health', (req, res) => {
