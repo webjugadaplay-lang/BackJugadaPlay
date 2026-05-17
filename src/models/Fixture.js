@@ -1,7 +1,7 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const FootballMatch = sequelize.define('FootballMatch', {
+const Fixture = sequelize.define('Fixture', {
   id: {
     type: DataTypes.BIGINT,
     primaryKey: true,
@@ -18,6 +18,9 @@ const FootballMatch = sequelize.define('FootballMatch', {
   league_country: {
     type: DataTypes.STRING(100)
   },
+  league_logo: {
+    type: DataTypes.TEXT
+  },
   season: {
     type: DataTypes.INTEGER
   },
@@ -25,7 +28,8 @@ const FootballMatch = sequelize.define('FootballMatch', {
     type: DataTypes.INTEGER
   },
   home_team_name: {
-    type: DataTypes.STRING(100)
+    type: DataTypes.STRING(100),
+    allowNull: false
   },
   home_team_logo: {
     type: DataTypes.TEXT
@@ -34,7 +38,8 @@ const FootballMatch = sequelize.define('FootballMatch', {
     type: DataTypes.INTEGER
   },
   away_team_name: {
-    type: DataTypes.STRING(100)
+    type: DataTypes.STRING(100),
+    allowNull: false
   },
   away_team_logo: {
     type: DataTypes.TEXT
@@ -44,11 +49,15 @@ const FootballMatch = sequelize.define('FootballMatch', {
     allowNull: false
   },
   status: {
-    type: DataTypes.STRING(20),
+    type: DataTypes.STRING(10),
     defaultValue: 'NS'
   },
   status_long: {
     type: DataTypes.STRING(50)
+  },
+  elapsed: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
   },
   goals_home: {
     type: DataTypes.INTEGER,
@@ -57,12 +66,31 @@ const FootballMatch = sequelize.define('FootballMatch', {
   goals_away: {
     type: DataTypes.INTEGER,
     defaultValue: null
+  },
+  halftime_home: {
+    type: DataTypes.INTEGER,
+    defaultValue: null
+  },
+  halftime_away: {
+    type: DataTypes.INTEGER,
+    defaultValue: null
+  },
+  fulltime_home: {
+    type: DataTypes.INTEGER,
+    defaultValue: null
+  },
+  fulltime_away: {
+    type: DataTypes.INTEGER,
+    defaultValue: null
+  },
+  venue: {
+    type: DataTypes.STRING(150)
   }
 }, {
-  tableName: 'football_matches',
+  tableName: 'fixtures',
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at'
 });
 
-module.exports = FootballMatch;
+module.exports = Fixture;

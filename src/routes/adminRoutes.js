@@ -25,6 +25,6 @@ router.get("/live-matches", adminController.getLiveMatches);
 router.patch("/rooms/:roomId/score", adminController.updateLiveScore);
 router.patch("/rooms/:roomId/status", adminController.updateRoomStatus);
 router.post("/rooms/:roomId/calculate-winners", adminController.calculateWinners);
-router.post("/sync", adminController.syncCountries);
+router.post("/sync", adminController.syncApi);
 
 module.exports = router;

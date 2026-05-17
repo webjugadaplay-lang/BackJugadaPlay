@@ -2,7 +2,6 @@
 const Room = require('../models/Room');
 const User = require('../models/User');
 const Prediction = require('../models/Prediction');
-const FootballMatch = require('../models/FootballMatch');
 const apiFootballService = require('../services/apiFootballService');
 const { Op } = require('sequelize');
 
@@ -254,85 +253,132 @@ exports.calculateWinners = async (req, res) => {
   }
 };
 
-// ============ Sincronización de Países ============
-const Country = require('../models/Country');
+// ============ Sincronización de Partidos (Fixtures) ============
+const Fixture = require('../models/Fixture');
 
-exports.syncCountries = async (req, res) => {
+exports.syncFixtures = async (req, res) => {
   try {
-    console.log('🔄 Iniciando sincronización de países...');
+    console.log('🔄 Iniciando sincronización de partidos...');
 
-    // Verificar cuándo fue la última sincronización
-    const lastCountry = await Country.findOne({
-      order: [['updated_at', 'DESC']]  // ← cambiar a updated_at
-    });
+    const today = new Date();
+    const nextMonth = new Date();
+    nextMonth.setDate(today.getDate() + 30);
 
-    
+    const dateFrom = today.toISOString().split('T')[0];
+    const dateTo = nextMonth.toISOString().split('T')[0];
+    const season = today.getFullYear();
 
-    const now = new Date();
-    const ONE_YEAR = 365 * 24 * 60 * 60 * 1000; // 1 año en milisegundos
+    // Ligas importantes: Brasileirão, Argentina, Libertadores, Sudamericana, Premier, LaLiga
+    const leaguesToSync = [
+      // BRASIL
+      { id: 71, name: 'Brasileirão Série A' },
+      { id: 72, name: 'Brasileirão Série B' },
+      //{ id: 74, name: 'Copa do Brasil' },
+      //{ id: 75, name: 'Campeonato Paulista' },
+      //{ id: 76, name: 'Campeonato Carioca' },
 
-    if (lastCountry && lastCountry.last_sync_at) {
-      const lastSync = new Date(lastCountry.last_sync_at);
-      const timeSinceLastSync = now - new Date(lastCountry.updated_at);  // ← cambiar
+      // ARGENTINA
+      { id: 128, name: 'Liga Profesional Argentina' },
+      //{ id: 129, name: 'Copa Argentina' },
 
-      if (timeSinceLastSync < ONE_YEAR) {
-        // Menos de 1 año, solo actualizar fecha
-        await Country.update(
-          { last_sync_at: now },
-          { where: {} }
-        );
+      // COLOMBIA
+      { id: 140, name: 'Liga BetPlay' },
+      //{ id: 141, name: 'Copa Colombia' },
 
-        console.log(`✅ Última sincronización fue hace ${Math.round(timeSinceLastSync / (1000 * 60 * 60 * 24))} días. Solo se actualizó la fecha.`);
+      // RESTO LATAM
+      //{ id: 144, name: 'Primera División Uruguay' },
+      //{ id: 150, name: 'Primera División Chile' },
+      //{ id: 145, name: 'Liga 1 Perú' },
+      //{ id: 149, name: 'LigaPro Ecuador' },
+      //{ id: 146, name: 'Primera División Paraguay' },
+      //{ id: 153, name: 'Liga MX' },
 
-        return res.json({
-          success: true,
-          message: 'Menos de 1 año desde última sincronización. Solo se actualizó la fecha.',
-          action: 'date_only',
-          lastSyncDate: lastSync
-        });
+      // INTERNACIONALES
+      { id: 13, name: 'Copa Libertadores' },
+      { id: 11, name: 'Copa Sudamericana' },
+      //{ id: 14, name: 'Recopa Sudamericana' },
+
+      // EUROPA (opcional)
+      { id: 2, name: 'UEFA Champions League' },
+      //{ id: 3, name: 'UEFA Europa League' },
+      { id: 39, name: 'Premier League' },
+      //{ id: 140, name: 'La Liga' },
+      //{ id: 135, name: 'Serie A' },
+      { id: 78, name: 'Bundesliga' },
+      { id: 61, name: 'Ligue 1' }
+    ];
+
+    let newMatches = 0;
+    let updatedMatches = 0;
+
+    for (const league of leaguesToSync) {
+      const fixtures = await apiFootballService.getFixturesByLeague(league.id, season, dateFrom, dateTo);
+
+      for (const fixture of fixtures) {
+        const fixtureData = {
+          id: fixture.fixture.id,
+          league_id: fixture.league.id,
+          league_name: fixture.league.name,
+          league_country: fixture.league.country,
+          league_logo: fixture.league.logo,
+          season: fixture.league.season,
+          home_team_id: fixture.teams.home.id,
+          home_team_name: fixture.teams.home.name,
+          home_team_logo: fixture.teams.home.logo,
+          away_team_id: fixture.teams.away.id,
+          away_team_name: fixture.teams.away.name,
+          away_team_logo: fixture.teams.away.logo,
+          match_date: fixture.fixture.date,
+          status: fixture.fixture.status.short,
+          status_long: fixture.fixture.status.long,
+          elapsed: fixture.fixture.status.elapsed || 0,
+          goals_home: fixture.goals.home,
+          goals_away: fixture.goals.away,
+          halftime_home: fixture.score?.halftime?.home,
+          halftime_away: fixture.score?.halftime?.away,
+          fulltime_home: fixture.score?.fulltime?.home,
+          fulltime_away: fixture.score?.fulltime?.away,
+          venue: fixture.fixture.venue?.name
+        };
+
+        const existingMatch = await Fixture.findByPk(fixtureData.id);
+
+        if (!existingMatch) {
+          await Fixture.create(fixtureData);
+          newMatches++;
+        } else {
+          // Verificar si hay cambios importantes
+          const needsUpdate =
+            existingMatch.status !== fixtureData.status ||
+            existingMatch.goals_home !== fixtureData.goals_home ||
+            existingMatch.goals_away !== fixtureData.goals_away ||
+            existingMatch.match_date !== fixtureData.match_date;
+
+          if (needsUpdate) {
+            await existingMatch.update(fixtureData);
+            updatedMatches++;
+          }
+        }
       }
     }
 
-    // Más de 1 año o nunca se sincronizó → obtener datos frescos
-    const countries = await apiFootballService.getCountries();
-
-    let newCount = 0;
-    let updatedCount = 0;
-
-    for (const country of countries) {
-      const [instance, created] = await Country.upsert({
-        name: country.name,
-        code: country.code,
-        flag: country.flag,
-        last_sync_at: now
-      });
-
-      if (created) {
-        newCount++;
-      } else {
-        updatedCount++;
-      }
-    }
-
-    console.log(`✅ Países sincronizados: ${newCount} nuevos, ${updatedCount} actualizados`);
+    console.log(`✅ Partidos sincronizados: ${newMatches} nuevos, ${updatedMatches} actualizados`);
 
     res.json({
       success: true,
-      message: 'Países sincronizados correctamente',
-      action: 'full_sync',
+      message: 'Partidos sincronizados correctamente',
       stats: {
-        new: newCount,
-        updated: updatedCount,
-        total: newCount + updatedCount,
-        lastSyncDate: now
+        newMatches,
+        updatedMatches,
+        totalProcessed: newMatches + updatedMatches
       }
     });
 
   } catch (error) {
-    console.error('❌ Error sincronizando países:', error);
+    console.error('❌ Error sincronizando partidos:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al sincronizar países',
+      message: 'Error al sincronizar partidos',
       error: error.message
     });
   }
