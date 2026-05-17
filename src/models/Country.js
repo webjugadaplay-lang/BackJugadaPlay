@@ -5,38 +5,26 @@ const Country = sequelize.define('Country', {
   id: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
-    primaryKey: true,
+    primaryKey: true
   },
   name: {
     type: DataTypes.STRING(100),
     allowNull: false,
-    unique: true,
+    unique: true
   },
   code: {
     type: DataTypes.STRING(10),
-    allowNull: false,
-    unique: true,
+    allowNull: true
   },
   flag: {
-    type: DataTypes.STRING(255),
-  },
-  continent_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'continents',
-      key: 'id',
-    },
-  },
+    type: DataTypes.TEXT,
+    allowNull: true
+  }
 }, {
-  timestamps: false,
   tableName: 'countries',
+  timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at'
 });
-
-// Asociaciones
-Country.associate = (models) => {
-  Country.belongsTo(models.Continent, { foreignKey: 'continent_id', as: 'continent' });
-  Country.hasMany(models.Tournament, { foreignKey: 'country_id', as: 'tournaments' });
-};
 
 module.exports = Country;
