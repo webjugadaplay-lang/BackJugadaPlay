@@ -2,6 +2,7 @@
 const Room = require('../models/Room');
 const User = require('../models/User');
 const Prediction = require('../models/Prediction');
+const Fixture = require('../models/Fixture');
 const apiFootballService = require('../services/apiFootballService');
 const { Op } = require('sequelize');
 
@@ -254,8 +255,6 @@ exports.calculateWinners = async (req, res) => {
 };
 
 // ============ Sincronización de Partidos (Fixtures) ============
-const Fixture = require('../models/Fixture');
-
 exports.syncFixtures = async (req, res) => {
   try {
     console.log('🔄 Iniciando sincronización de partidos...');
