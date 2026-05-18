@@ -382,3 +382,50 @@ exports.syncFixtures = async (req, res) => {
     });
   }
 };
+
+// ============ Obtener partidos desde la base de datos ============
+exports.getFixtures = async (req, res) => {
+  try {
+    const { leagueId, season, dateFrom, dateTo, teamName } = req.query;
+
+    let whereClause = {};
+
+    // Aplicar filtros
+    if (leagueId) {
+      whereClause.league_id = leagueId;
+    }
+    if (season) {
+      whereClause.season = season;
+    }
+    if (dateFrom) {
+      whereClause.match_date = { [Op.gte]: dateFrom };
+    }
+    if (dateTo) {
+      whereClause.match_date = { [Op.lte]: dateTo };
+    }
+    if (teamName) {
+      whereClause[Op.or] = [
+        { home_team_name: { [Op.iLike]: `%${teamName}%` } },
+        { away_team_name: { [Op.iLike]: `%${teamName}%` } }
+      ];
+    }
+
+    const fixtures = await Fixture.findAll({
+      where: whereClause,
+      order: [['match_date', 'ASC']],
+      limit: 100
+    });
+
+    res.json({
+      success: true,
+      data: fixtures
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo fixtures:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener partidos'
+    });
+  }
+};
