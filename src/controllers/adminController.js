@@ -429,3 +429,28 @@ exports.getFixtures = async (req, res) => {
     });
   }
 };
+
+// ============ Obtener ligas para el filtro ============
+exports.getLeagues = async (req, res) => {
+  try {
+    const leagues = await Fixture.findAll({
+      attributes: ['league_id', 'league_name', 'league_country'],
+      group: ['league_id', 'league_name', 'league_country'],
+      order: [['league_country', 'ASC'], ['league_name', 'ASC']],
+      raw: true
+    });
+
+    console.log(`📊 ${leagues.length} ligas encontradas`);
+
+    res.json({
+      success: true,
+      data: leagues
+    });
+  } catch (error) {
+    console.error('Error al obtener ligas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener ligas'
+    });
+  }
+};
