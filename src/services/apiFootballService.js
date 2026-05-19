@@ -6,7 +6,7 @@ const API_KEY = process.env.API_FOOTBALL_KEY;
 async function getFixturesByLeague(leagueId, season, dateFrom, dateTo) {
   try {
     console.log(`📡 Buscando fixtures para liga ${leagueId}, temporada ${season}, desde ${dateFrom} hasta ${dateTo}`);
-    
+
     const response = await axios({
       method: 'GET',
       url: `${API_URL}/fixtures`,
@@ -20,7 +20,7 @@ async function getFixturesByLeague(leagueId, season, dateFrom, dateTo) {
         'x-apisports-key': API_KEY
       }
     });
-    
+
     console.log(`✅ Encontrados ${response.data.results} fixtures`);
     return response.data.response;
   } catch (error) {
@@ -29,6 +29,28 @@ async function getFixturesByLeague(leagueId, season, dateFrom, dateTo) {
   }
 }
 
+async function getCurrentLeagues() {
+  try {
+    console.log('📡 Obteniendo ligas activas desde API-Football...');
+
+    const response = await axios({
+      method: 'GET',
+      url: `${API_URL}/leagues`,
+      params: { current: 'true' },
+      headers: {
+        'x-apisports-key': API_KEY
+      }
+    });
+
+    console.log(`✅ ${response.data.results} ligas activas obtenidas`);
+    return response.data.response;
+  } catch (error) {
+    console.error('❌ Error obteniendo ligas activas:', error.message);
+    throw error;
+  }
+}
+
 module.exports = {
-  getFixturesByLeague
+  getFixturesByLeague,
+  getCurrentLeagues
 };

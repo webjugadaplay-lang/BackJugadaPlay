@@ -29,5 +29,7 @@ router.post("/sync", adminController.syncFixtures);
 router.get("/fixtures", adminController.getFixtures);
 router.get("/leagues", adminController.getLeagues);
 router.get("/live-fixtures", adminController.getLiveFixtures);
+router.get("/available-leagues", adminController.getAvailableLeagues);
+router.post("/add-leagues", adminController.addLeagues);
 
 module.exports = router;

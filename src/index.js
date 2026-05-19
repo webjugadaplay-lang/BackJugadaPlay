@@ -8,6 +8,7 @@ const createAdmin = require('./scripts/createAdmin');
 const User = require('./models/User');
 const PasswordResetToken = require('./models/PasswordResetToken');
 const Fixture = require('./models/Fixture');
+const UserLeague = require('./models/UserLeague');
 
 // Importar rutas
 const authRoutes = require('./routes/authRoutes');
