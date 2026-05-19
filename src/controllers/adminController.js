@@ -387,10 +387,32 @@ exports.syncFixtures = async (req, res) => {
 exports.getFixtures = async (req, res) => {
   try {
     const { leagueId, season, dateFrom, dateTo, teamName } = req.query;
-
+    
     let whereClause = {};
-
-    // Aplicar filtros
+    
+    // Estados que NO deben mostrarse (finalizados, en curso, cancelados)
+    const excludedStatuses = [
+      'FT',    // Finalizado tiempo regular
+      'AET',   // Finalizado después de extra time
+      'PEN',   // Finalizado por penales
+      '1H',    // Primer tiempo (en curso)
+      'HT',    // Medio tiempo
+      '2H',    // Segundo tiempo (en curso)
+      'ET',    // Tiempo extra (en curso)
+      'BT',    // Pausa en tiempo extra
+      'P',     // Penales en curso
+      'INT',   // Interrumpido
+      'LIVE',  // En curso (casos raros)
+      'PST',   // Postpuesto
+      'CANC',  // Cancelado
+      'ABD',   // Abandonado
+      'AWD',   // Derrota técnica
+      'WO'     // WalkOver
+    ];
+    
+    whereClause.status = { [Op.notIn]: excludedStatuses };
+    
+    // Aplicar filtros opcionales
     if (leagueId) {
       whereClause.league_id = leagueId;
     }
@@ -401,7 +423,7 @@ exports.getFixtures = async (req, res) => {
       whereClause.match_date = { [Op.gte]: dateFrom };
     }
     if (dateTo) {
-      whereClause.match_date = { [Op.lte]: dateTo };
+      whereClause.match_date = { ...whereClause.match_date, [Op.lte]: dateTo };
     }
     if (teamName) {
       whereClause[Op.or] = [
@@ -409,18 +431,20 @@ exports.getFixtures = async (req, res) => {
         { away_team_name: { [Op.iLike]: `%${teamName}%` } }
       ];
     }
-
+    
     const fixtures = await Fixture.findAll({
       where: whereClause,
       order: [['match_date', 'ASC']],
       limit: 100
     });
-
+    
+    console.log(`📋 ${fixtures.length} partidos próximos encontrados`);
+    
     res.json({
       success: true,
       data: fixtures
     });
-
+    
   } catch (error) {
     console.error('Error obteniendo fixtures:', error);
     res.status(500).json({
