@@ -28,5 +28,6 @@ router.post("/rooms/:roomId/calculate-winners", adminController.calculateWinners
 router.post("/sync", adminController.syncFixtures);
 router.get("/fixtures", adminController.getFixtures);
 router.get("/leagues", adminController.getLeagues);
+router.get("/live-fixtures", adminController.getLiveFixtures);
 
 module.exports = router;

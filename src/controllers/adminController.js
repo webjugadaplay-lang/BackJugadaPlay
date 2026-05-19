@@ -383,31 +383,52 @@ exports.syncFixtures = async (req, res) => {
   }
 };
 
+// ============ Actualizar estados de partidos vencidos ============
+const updateExpiredMatches = async () => {
+  try {
+    const now = new Date();
+
+    // Actualizar partidos con fecha pasada y estado NS o TBD
+    const [updatedCount] = await Fixture.update(
+      {
+        status: 'FT',
+        status_long: 'Match Finished (Auto)',
+        updated_at: now
+      },
+      {
+        where: {
+          match_date: { [Op.lt]: now },
+          status: { [Op.in]: ['NS', 'TBD'] }
+        }
+      }
+    );
+
+    if (updatedCount > 0) {
+      console.log(`🔄 ${updatedCount} partidos actualizados a FT automáticamente (fecha vencida)`);
+    }
+
+    return updatedCount;
+  } catch (error) {
+    console.error('Error actualizando partidos vencidos:', error);
+    return 0;
+  }
+};
+
 // ============ Obtener partidos desde la base de datos ============
 exports.getFixtures = async (req, res) => {
   try {
+    // PRIMERO: Actualizar estados de partidos vencidos
+    await updateExpiredMatches();
+    
     const { leagueId, season, dateFrom, dateTo, teamName } = req.query;
     
     let whereClause = {};
     
-    // Estados que NO deben mostrarse (finalizados, en curso, cancelados)
+    // Estados que NO deben mostrarse
     const excludedStatuses = [
-      'FT',    // Finalizado tiempo regular
-      'AET',   // Finalizado después de extra time
-      'PEN',   // Finalizado por penales
-      '1H',    // Primer tiempo (en curso)
-      'HT',    // Medio tiempo
-      '2H',    // Segundo tiempo (en curso)
-      'ET',    // Tiempo extra (en curso)
-      'BT',    // Pausa en tiempo extra
-      'P',     // Penales en curso
-      'INT',   // Interrumpido
-      'LIVE',  // En curso (casos raros)
-      'PST',   // Postpuesto
-      'CANC',  // Cancelado
-      'ABD',   // Abandonado
-      'AWD',   // Derrota técnica
-      'WO'     // WalkOver
+      'FT', 'AET', 'PEN',  // Finalizados
+      '1H', 'HT', '2H', 'ET', 'BT', 'P', 'INT', 'LIVE',  // En curso
+      'PST', 'CANC', 'ABD', 'AWD', 'WO'  // Cancelados
     ];
     
     whereClause.status = { [Op.notIn]: excludedStatuses };
@@ -437,8 +458,6 @@ exports.getFixtures = async (req, res) => {
       order: [['match_date', 'ASC']],
       limit: 100
     });
-    
-    console.log(`📋 ${fixtures.length} partidos próximos encontrados`);
     
     res.json({
       success: true,
@@ -475,6 +494,36 @@ exports.getLeagues = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al obtener ligas'
+    });
+  }
+};
+
+// ============ Obtener partidos en curso ============
+exports.getLiveFixtures = async (req, res) => {
+  try {
+    // Estados que indican partido en curso
+    const liveStatuses = ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'INT', 'LIVE'];
+    
+    const liveMatches = await Fixture.findAll({
+      where: {
+        status: { [Op.in]: liveStatuses }
+      },
+      order: [['match_date', 'ASC']]
+    });
+    
+    // Actualizar también partidos vencidos (opcional)
+    await updateExpiredMatches();
+    
+    res.json({
+      success: true,
+      data: liveMatches
+    });
+    
+  } catch (error) {
+    console.error('Error obteniendo partidos en curso:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener partidos en curso'
     });
   }
 };
