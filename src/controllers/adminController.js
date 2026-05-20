@@ -255,10 +255,24 @@ exports.calculateWinners = async (req, res) => {
   }
 };
 
-// ============ Sincronización de Partidos (Fixtures) ============
+// ============ Sincronización de Partidos (lee de user_leagues) ============
 exports.syncFixtures = async (req, res) => {
   try {
     console.log('🔄 Iniciando sincronización de partidos...');
+
+    // 1. Obtener ligas activas de la base de datos
+    const activeLeagues = await UserLeague.findAll({
+      where: { active: true }
+    });
+
+    if (activeLeagues.length === 0) {
+      return res.json({
+        success: false,
+        message: 'No hay ligas sincronizadas. Agrega ligas primero desde la pestaña "Gestión de Ligas".'
+      });
+    }
+
+    console.log(`📋 ${activeLeagues.length} ligas activas encontradas`);
 
     const today = new Date();
     const nextMonth = new Date();
@@ -266,103 +280,72 @@ exports.syncFixtures = async (req, res) => {
 
     const dateFrom = today.toISOString().split('T')[0];
     const dateTo = nextMonth.toISOString().split('T')[0];
-    const season = today.getFullYear();
-
-    // Ligas importantes: Brasileirão, Argentina, Libertadores, Sudamericana, Premier, LaLiga
-    const leaguesToSync = [
-      // BRASIL
-      { id: 71, name: 'Brasileirão Série A' },
-      { id: 72, name: 'Brasileirão Série B' },
-      //{ id: 74, name: 'Copa do Brasil' },
-      //{ id: 75, name: 'Campeonato Paulista' },
-      //{ id: 76, name: 'Campeonato Carioca' },
-
-      // ARGENTINA
-      { id: 128, name: 'Liga Profesional Argentina' },
-      //{ id: 129, name: 'Copa Argentina' },
-
-      // COLOMBIA
-      { id: 140, name: 'Liga BetPlay' },
-      //{ id: 141, name: 'Copa Colombia' },
-
-      // RESTO LATAM
-      //{ id: 144, name: 'Primera División Uruguay' },
-      //{ id: 150, name: 'Primera División Chile' },
-      //{ id: 145, name: 'Liga 1 Perú' },
-      //{ id: 149, name: 'LigaPro Ecuador' },
-      //{ id: 146, name: 'Primera División Paraguay' },
-      //{ id: 153, name: 'Liga MX' },
-
-      // INTERNACIONALES
-      { id: 13, name: 'Copa Libertadores' },
-      { id: 11, name: 'Copa Sudamericana' },
-      //{ id: 14, name: 'Recopa Sudamericana' },
-
-      // EUROPA (opcional)
-      { id: 2, name: 'UEFA Champions League' },
-      //{ id: 3, name: 'UEFA Europa League' },
-      { id: 39, name: 'Premier League' },
-      //{ id: 140, name: 'La Liga' },
-      //{ id: 135, name: 'Serie A' },
-      { id: 78, name: 'Bundesliga' },
-      { id: 61, name: 'Ligue 1' }
-    ];
 
     let newMatches = 0;
     let updatedMatches = 0;
 
-    for (const league of leaguesToSync) {
-      const fixtures = await apiFootballService.getFixturesByLeague(league.id, season, dateFrom, dateTo);
+    // 2. Para cada liga activa, traer sus partidos
+    for (const league of activeLeagues) {
+      console.log(`📡 Sincronizando ${league.league_name} (ID: ${league.league_id})...`);
 
-      for (const fixture of fixtures) {
-        const fixtureData = {
-          id: fixture.fixture.id,
-          league_id: fixture.league.id,
-          league_name: fixture.league.name,
-          league_country: fixture.league.country,
-          league_logo: fixture.league.logo,
-          season: fixture.league.season,
-          home_team_id: fixture.teams.home.id,
-          home_team_name: fixture.teams.home.name,
-          home_team_logo: fixture.teams.home.logo,
-          away_team_id: fixture.teams.away.id,
-          away_team_name: fixture.teams.away.name,
-          away_team_logo: fixture.teams.away.logo,
-          match_date: fixture.fixture.date,
-          status: fixture.fixture.status.short,
-          status_long: fixture.fixture.status.long,
-          elapsed: fixture.fixture.status.elapsed || 0,
-          goals_home: fixture.goals.home,
-          goals_away: fixture.goals.away,
-          halftime_home: fixture.score?.halftime?.home,
-          halftime_away: fixture.score?.halftime?.away,
-          fulltime_home: fixture.score?.fulltime?.home,
-          fulltime_away: fixture.score?.fulltime?.away,
-          venue: fixture.fixture.venue?.name
-        };
+      // Probar con dos temporadas: 2025 y 2026
+      const seasons = [2025, 2026];
 
-        const existingMatch = await Fixture.findByPk(fixtureData.id);
+      for (const season of seasons) {
+        try {
+          const fixtures = await apiFootballService.getFixturesByLeague(league.league_id, season, dateFrom, dateTo);
 
-        if (!existingMatch) {
-          await Fixture.create(fixtureData);
-          newMatches++;
-        } else {
-          // Verificar si hay cambios importantes
-          const needsUpdate =
-            existingMatch.status !== fixtureData.status ||
-            existingMatch.goals_home !== fixtureData.goals_home ||
-            existingMatch.goals_away !== fixtureData.goals_away ||
-            existingMatch.match_date !== fixtureData.match_date;
+          for (const fixture of fixtures) {
+            const fixtureData = {
+              id: fixture.fixture.id,
+              league_id: fixture.league.id,
+              league_name: fixture.league.name,
+              league_country: fixture.league.country,
+              league_logo: fixture.league.logo,
+              season: fixture.league.season,
+              home_team_id: fixture.teams.home.id,
+              home_team_name: fixture.teams.home.name,
+              home_team_logo: fixture.teams.home.logo,
+              away_team_id: fixture.teams.away.id,
+              away_team_name: fixture.teams.away.name,
+              away_team_logo: fixture.teams.away.logo,
+              match_date: fixture.fixture.date,
+              status: fixture.fixture.status.short,
+              status_long: fixture.fixture.status.long,
+              elapsed: fixture.fixture.status.elapsed || 0,
+              goals_home: fixture.goals.home,
+              goals_away: fixture.goals.away,
+              halftime_home: fixture.score?.halftime?.home,
+              halftime_away: fixture.score?.halftime?.away,
+              fulltime_home: fixture.score?.fulltime?.home,
+              fulltime_away: fixture.score?.fulltime?.away,
+              venue: fixture.fixture.venue?.name
+            };
 
-          if (needsUpdate) {
-            await existingMatch.update(fixtureData);
-            updatedMatches++;
+            const existingMatch = await Fixture.findByPk(fixtureData.id);
+
+            if (!existingMatch) {
+              await Fixture.create(fixtureData);
+              newMatches++;
+            } else {
+              const needsUpdate =
+                existingMatch.status !== fixtureData.status ||
+                existingMatch.goals_home !== fixtureData.goals_home ||
+                existingMatch.goals_away !== fixtureData.goals_away;
+
+              if (needsUpdate) {
+                await existingMatch.update(fixtureData);
+                updatedMatches++;
+              }
+            }
           }
+        } catch (error) {
+          console.error(`❌ Error con temporada ${season} de ${league.league_name}:`, error.message);
         }
       }
     }
 
-    console.log(`✅ Partidos sincronizados: ${newMatches} nuevos, ${updatedMatches} actualizados`);
+    console.log(`✅ Sincronización: ${newMatches} nuevos, ${updatedMatches} actualizados`);
 
     res.json({
       success: true,
@@ -370,12 +353,13 @@ exports.syncFixtures = async (req, res) => {
       stats: {
         newMatches,
         updatedMatches,
-        totalProcessed: newMatches + updatedMatches
+        totalProcessed: newMatches + updatedMatches,
+        activeLeagues: activeLeagues.length
       }
     });
 
   } catch (error) {
-    console.error('❌ Error sincronizando partidos:', error);
+    console.error('❌ Error en syncFixtures:', error);
     res.status(500).json({
       success: false,
       message: 'Error al sincronizar partidos',
@@ -543,11 +527,13 @@ exports.getAvailableLeagues = async (req, res) => {
     );
 
     // Ordenar por país y nombre
-    filteredLeagues.sort((a, b) => {
-      if (a.country.name === b.country.name) {
-        return a.league.name.localeCompare(b.league.name);
-      }
-      return a.country.name.localeCompare(b.country.name);
+    const filteredLeagues = leagues.filter(league => {
+      // Incluir ligas mundiales (World)
+      if (league.country.name === 'World') return true;
+      // Incluir copas internacionales
+      if (league.league.type === 'Cup') return true;
+      // Incluir ligas normales de países relevantes
+      return relevantCountries.includes(league.country.name) && league.league.type === 'League';
     });
 
     res.json({
@@ -575,10 +561,18 @@ exports.addLeagues = async (req, res) => {
   try {
     const { leagues } = req.body; // leagues es un array de objetos con id, name, country, logo
 
+    if (!leagues || leagues.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No se enviaron ligas para agregar'
+      });
+    }
+
     let added = 0;
     let skipped = 0;
 
     for (const league of leagues) {
+      // Verificar si ya existe
       const exists = await UserLeague.findOne({
         where: { league_id: league.id }
       });
@@ -589,16 +583,13 @@ exports.addLeagues = async (req, res) => {
           league_name: league.name,
           league_country: league.country,
           league_logo: league.logo,
-          season_2025: true,
-          season_2026: true,
           active: true
         });
         added++;
-
-        // Sincronizar partidos iniciales de esta liga
-        await syncFixturesForLeague(league.id, league.name);
+        console.log(`✅ Liga agregada: ${league.name} (${league.country})`);
       } else {
         skipped++;
+        console.log(`⏭️ Liga ya existente: ${league.name}`);
       }
     }
 
@@ -612,7 +603,8 @@ exports.addLeagues = async (req, res) => {
     console.error('Error agregando ligas:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al agregar ligas'
+      message: 'Error al agregar ligas',
+      error: error.message
     });
   }
 };
@@ -668,5 +660,32 @@ const syncFixturesForLeague = async (leagueId, leagueName) => {
     console.log(`✅ Partidos iniciales sincronizados para ${leagueName}`);
   } catch (error) {
     console.error(`Error sincronizando partidos para liga ${leagueId}:`, error);
+  }
+};
+
+// ============ Obtener ligas ya sincronizadas por el admin ============
+exports.getUserLeagues = async (req, res) => {
+  try {
+    const userLeagues = await UserLeague.findAll({
+      where: { active: true },
+      order: [['league_country', 'ASC'], ['league_name', 'ASC']]
+    });
+
+    res.json({
+      success: true,
+      data: userLeagues.map(league => ({
+        league_id: league.league_id,
+        league_name: league.league_name,
+        league_country: league.league_country,
+        league_logo: league.league_logo
+      }))
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo ligas del usuario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener ligas sincronizadas'
+    });
   }
 };
