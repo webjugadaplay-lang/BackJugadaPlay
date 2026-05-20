@@ -521,11 +521,6 @@ exports.getAvailableLeagues = async (req, res) => {
     // Filtrar solo ligas de interés (opcional)
     const relevantCountries = ['Brazil', 'Argentina', 'Colombia', 'Uruguay', 'Chile', 'Peru', 'Ecuador', 'Paraguay', 'Bolivia', 'Spain', 'England', 'Italy', 'Germany', 'France'];
 
-    const filteredLeagues = leagues.filter(league =>
-      relevantCountries.includes(league.country.name) &&
-      league.league.type === 'League'
-    );
-
     // Ordenar por país y nombre
     const filteredLeagues = leagues.filter(league => {
       // Incluir ligas mundiales (World)
