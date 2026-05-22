@@ -27,7 +27,6 @@ router.post('/rooms', authMiddleware, async (req, res) => {
 
     console.log('Creating room with fixture:', fixture_id);
 
-    // Validaciones
     if (!barId || !fixture_id) {
       return res.status(400).json({ 
         success: false, 
@@ -35,7 +34,7 @@ router.post('/rooms', authMiddleware, async (req, res) => {
       });
     }
 
-    // Obtener el fixture
+    // Obtener el fixture para validar y obtener datos
     const fixture = await Fixture.findByPk(fixture_id);
     if (!fixture) {
       return res.status(404).json({ 
@@ -53,23 +52,15 @@ router.post('/rooms', authMiddleware, async (req, res) => {
       });
     }
 
-    // Verificar que el bar existe
-    const bar = await Bar.findByPk(barId);
-    if (!bar) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Bar no encontrado' 
-      });
-    }
-
-    // Calcular tiempo de cierre de predicciones
+    // Calcular tiempo de cierre
     const prediction_close_time = new Date(matchDate);
     prediction_close_time.setMinutes(matchDate.getMinutes() - prediction_close_minutes);
 
-    // Crear la sala
+    // Crear la sala - Asegurar que fixture_id se guarda correctamente
     const room = await Room.create({
+      id: uuidv4(),
       bar_id: barId,
-      fixture_id: fixture_id,
+      fixture_id: parseInt(fixture_id), // Asegurar que es número
       code: generateRoomCode(),
       name: `${fixture.home_team_name} vs ${fixture.away_team_name}`,
       entry_fee: entry_fee || 0,
@@ -81,22 +72,22 @@ router.post('/rooms', authMiddleware, async (req, res) => {
       created_by: req.user.id
     });
 
+    // Obtener la sala con sus relaciones
+    const roomWithFixture = await Room.findByPk(room.id, {
+      include: [{ model: Fixture }]
+    });
+
     res.status(201).json({
       success: true,
       message: 'Sala creada exitosamente',
       data: {
         room: {
-          id: room.id,
-          code: room.code,
-          name: room.name,
-          fixture: {
-            home_team: fixture.home_team_name,
-            away_team: fixture.away_team_name,
-            match_date: fixture.match_date,
-            venue: fixture.venue
-          },
-          entry_fee: room.entry_fee,
-          prediction_close_time: room.prediction_close_time
+          id: roomWithFixture.id,
+          code: roomWithFixture.code,
+          name: roomWithFixture.name,
+          fixture: roomWithFixture.Fixture,
+          entry_fee: roomWithFixture.entry_fee,
+          prediction_close_time: roomWithFixture.prediction_close_time
         }
       }
     });

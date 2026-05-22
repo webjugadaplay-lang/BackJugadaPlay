@@ -12,8 +12,12 @@ const Room = sequelize.define('Room', {
     allowNull: false,
   },
   fixture_id: {
-    type: DataTypes.BIGINT,
+    type: DataTypes.BIGINT,  // ← Este campo es crucial
     allowNull: false,
+    references: {
+      model: 'fixtures',  // Referencia a la tabla fixtures
+      key: 'id'
+    }
   },
   code: {
     type: DataTypes.STRING(10),
@@ -57,9 +61,10 @@ const Room = sequelize.define('Room', {
   tableName: 'rooms',
 });
 
+// Establecer la asociación con Fixture
 Room.associate = (models) => {
   Room.belongsTo(models.Bar, { foreignKey: 'bar_id' });
-  Room.belongsTo(models.Fixture, { foreignKey: 'fixture_id' });
+  Room.belongsTo(models.Fixture, { foreignKey: 'fixture_id' });  // ← Relación con Fixture
   Room.hasMany(models.Prediction, { foreignKey: 'room_id' });
   Room.hasMany(models.RoomParticipant, { foreignKey: 'room_id' });
 };
