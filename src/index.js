@@ -10,9 +10,11 @@ const PasswordResetToken = require('./models/PasswordResetToken');
 const Fixture = require('./models/Fixture');
 const UserLeague = require('./models/UserLeague');
 
+
 // Importar rutas
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const leagueRoutes = require('./routes/league');
 
 const app = express();
 const PORT = process.env.PORT || 10000; // Render espera 10000 por defecto
@@ -25,6 +27,7 @@ app.use(express.static('public'));
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/league', leagueRoutes);
 
 // Ruta de prueba
 app.get('/health', (req, res) => {
