@@ -1,3 +1,4 @@
+//src/index.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -15,6 +16,7 @@ const UserLeague = require('./models/UserLeague');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const leagueRoutes = require('./routes/league');
+const barRoutes = require('./routes/barRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 10000; // Render espera 10000 por defecto
@@ -28,6 +30,7 @@ app.use(express.static('public'));
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/league', leagueRoutes);
+app.use('/api/bar', barRoutes);
 
 // Ruta de prueba
 app.get('/health', (req, res) => {

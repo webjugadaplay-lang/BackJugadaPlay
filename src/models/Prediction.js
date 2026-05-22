@@ -15,27 +15,50 @@ const Prediction = sequelize.define('Prediction', {
     type: DataTypes.UUID,
     allowNull: false,
   },
-  score_home: {
+  // Predicciones específicas
+  goals_home: {
     type: DataTypes.INTEGER,
     allowNull: false,
   },
-  score_away: {
+  goals_away: {
     type: DataTypes.INTEGER,
     allowNull: false,
   },
-  paid: {
+  // Opcional: primera mitad
+  halftime_home: {
+    type: DataTypes.INTEGER,
+  },
+  halftime_away: {
+    type: DataTypes.INTEGER,
+  },
+  // Puntos obtenidos
+  points_goals: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  points_exact: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  total_points: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  is_paid: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
+  payment_id: {
+    type: DataTypes.STRING,
+  }
 }, {
   timestamps: true,
   tableName: 'predictions',
 });
 
-// Asociaciones
 Prediction.associate = (models) => {
-  Prediction.belongsTo(models.Room, { foreignKey: 'room_id', as: 'room' });
-  Prediction.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' }); // <- alias 'user'
+  Prediction.belongsTo(models.Room, { foreignKey: 'room_id' });
+  Prediction.belongsTo(models.User, { foreignKey: 'user_id' });
 };
 
 module.exports = Prediction;

@@ -11,24 +11,18 @@ const Room = sequelize.define('Room', {
     type: DataTypes.UUID,
     allowNull: false,
   },
+  fixture_id: {
+    type: DataTypes.BIGINT,
+    allowNull: false,
+  },
+  code: {
+    type: DataTypes.STRING(10),
+    unique: true,
+    allowNull: false,
+  },
   name: {
     type: DataTypes.STRING,
     allowNull: false,
-  },
-  team_home: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  team_away: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  match_date: {
-    type: DataTypes.DATE,
-    allowNull: false,
-  },
-  prediction_close_time: {
-    type: DataTypes.DATE,
   },
   entry_fee: {
     type: DataTypes.DECIMAL(10, 2),
@@ -38,25 +32,36 @@ const Room = sequelize.define('Room', {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0,
   },
+  max_participants: {
+    type: DataTypes.INTEGER,
+    defaultValue: 50,
+  },
+  current_participants: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
   status: {
-    type: DataTypes.ENUM('pending', 'active', 'finished', 'cancelled'),
-    defaultValue: 'pending',
+    type: DataTypes.ENUM('active', 'closed', 'finished', 'cancelled'),
+    defaultValue: 'active',
   },
-  current_score_home: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
+  prediction_close_time: {
+    type: DataTypes.DATE,
+    allowNull: false,
   },
-  current_score_away: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-  },
+  created_by: {
+    type: DataTypes.UUID,
+    allowNull: false,
+  }
 }, {
   timestamps: true,
   tableName: 'rooms',
 });
 
 Room.associate = (models) => {
-  Room.belongsTo(models.User, { foreignKey: 'bar_id' });
+  Room.belongsTo(models.Bar, { foreignKey: 'bar_id' });
+  Room.belongsTo(models.Fixture, { foreignKey: 'fixture_id' });
+  Room.hasMany(models.Prediction, { foreignKey: 'room_id' });
+  Room.hasMany(models.RoomParticipant, { foreignKey: 'room_id' });
 };
 
 module.exports = Room;
