@@ -31,9 +31,4 @@ const RoomParticipant = sequelize.define('RoomParticipant', {
   tableName: 'room_participants',
 });
 
-RoomParticipant.associate = (models) => {
-  RoomParticipant.belongsTo(models.Room, { foreignKey: 'room_id' });
-  RoomParticipant.belongsTo(models.User, { foreignKey: 'user_id' });
-};
-
 module.exports = RoomParticipant;

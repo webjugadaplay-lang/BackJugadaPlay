@@ -1,9 +1,14 @@
 //src/routes/barRoutes.js
 const express = require('express');
 const router = express.Router();
-const { Room, Fixture, Bar, Prediction, RoomParticipant } = require('../models');
+// Importar modelos directamente (sin usar index.js)
+const Room = require('../models/Room');
+const Fixture = require('../models/Fixture');
+const Bar = require('../models/Bar');
+const User = require('../models/User');
+const Prediction = require('../models/Prediction');
+const RoomParticipant = require('../models/RoomParticipant');
 const authMiddleware = require('../middleware/authMiddleware');
-const { v4: uuidv4 } = require('uuid');
 
 // Generar código único para la sala
 function generateRoomCode() {
@@ -122,28 +127,25 @@ router.get('/rooms', authMiddleware, async (req, res) => {
         bar_id: barId,
         status: status
       },
-      include: [
-        {
-          model: Fixture,
-          attributes: ['home_team_name', 'away_team_name', 'match_date', 'venue']
-        }
-      ],
       order: [['createdAt', 'DESC']]
     });
 
-    // Formatear respuesta
-    const formattedRooms = rooms.map(room => ({
-      id: room.id,
-      code: room.code,
-      partido: room.name,
-      fecha: room.Fixture ? room.Fixture.match_date : room.createdAt,
-      jugadores: room.current_participants,
-      pozo: room.total_pool,
-      entry_fee: room.entry_fee,
-      status: room.status
+    // Para cada sala, obtener el fixture relacionado
+    const roomsWithFixture = await Promise.all(rooms.map(async (room) => {
+      const fixture = await Fixture.findByPk(room.fixture_id);
+      return {
+        id: room.id,
+        code: room.code,
+        partido: room.name,
+        fecha: fixture ? fixture.match_date : room.createdAt,
+        jugadores: room.current_participants,
+        pozo: room.total_pool,
+        entry_fee: room.entry_fee,
+        status: room.status
+      };
     }));
 
-    res.json({ success: true, data: formattedRooms });
+    res.json({ success: true, data: roomsWithFixture });
 
   } catch (error) {
     console.error('Error fetching rooms:', error);
@@ -178,7 +180,7 @@ router.get('/stats', authMiddleware, async (req, res) => {
     // Obtener participantes únicos
     const participants = await RoomParticipant.findAll({
       where: { '$Room.bar_id$': barId },
-      include: [{ model: Room, attributes: [] }],
+      include: [{ model: Room, required: true, attributes: [] }],
       attributes: ['user_id'],
       group: ['user_id']
     });
@@ -191,10 +193,13 @@ router.get('/stats', authMiddleware, async (req, res) => {
     
     const totalRevenue = rooms.reduce((sum, room) => sum + parseFloat(room.total_pool || 0), 0);
 
-    // Ranking de usuarios (puedes ajustar esta consulta según tus necesidades)
+    // Ranking de usuarios
     const ranking = await RoomParticipant.findAll({
-      where: { '$Room.bar_id$': barId },
-      include: [{ model: Room, attributes: [] }],
+      include: [{
+        model: Room,
+        where: { bar_id: barId },
+        required: true
+      }],
       attributes: ['user_id', 'total_points'],
       order: [['total_points', 'DESC']],
       limit: 5
@@ -205,17 +210,22 @@ router.get('/stats', authMiddleware, async (req, res) => {
       predictions: p.total_points
     }));
 
+    // Obtener el nombre del bar
+    const bar = await Bar.findByPk(barId);
+
     res.json({
       success: true,
       data: {
         bar: {
           id: barId,
-          name: 'Nombre del Bar' // Puedes obtener esto de la tabla Bar
+          name: bar ? bar.barName : 'Mi Bar',
+          bar_name: bar ? bar.barName : 'Mi Bar',
+          balance: 0
         },
         stats: {
           activeRooms,
-          totalPlayers: participants.length,
-          todayRevenue: 0, // Calcular según fecha actual
+          totalPlayers: participants.length || 0,
+          todayRevenue: 0,
           totalRevenue,
           rating: 4.5
         },
@@ -237,17 +247,8 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   try {
     const { roomId } = req.params;
     
-    const room = await Room.findByPk(roomId, {
-      include: [
-        { model: Fixture },
-        { 
-          model: RoomParticipant,
-          include: [{ model: User, attributes: ['name', 'email'] }],
-          order: [['total_points', 'DESC']]
-        }
-      ]
-    });
-
+    const room = await Room.findByPk(roomId);
+    
     if (!room) {
       return res.status(404).json({ 
         success: false, 
@@ -255,12 +256,48 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
       });
     }
 
+    const fixture = await Fixture.findByPk(room.fixture_id);
+    
+    const participants = await RoomParticipant.findAll({
+      where: { room_id: roomId },
+      order: [['total_points', 'DESC']]
+    });
+
+    // Obtener nombres de usuarios para los participantes
+    const participantsWithUsers = await Promise.all(participants.map(async (p) => {
+      const user = await User.findByPk(p.user_id);
+      return {
+        id: p.id,
+        user_id: p.user_id,
+        user_name: user ? user.name : 'Usuario',
+        total_points: p.total_points,
+        rank: p.rank,
+        joined_at: p.joined_at
+      };
+    }));
+
     res.json({
       success: true,
       data: {
-        room,
-        participants: room.RoomParticipants || [],
-        fixture: room.Fixture
+        room: {
+          id: room.id,
+          code: room.code,
+          name: room.name,
+          entry_fee: room.entry_fee,
+          total_pool: room.total_pool,
+          status: room.status,
+          prediction_close_time: room.prediction_close_time,
+          current_participants: room.current_participants,
+          max_participants: room.max_participants
+        },
+        fixture: fixture ? {
+          home_team: fixture.home_team_name,
+          away_team: fixture.away_team_name,
+          match_date: fixture.match_date,
+          venue: fixture.venue,
+          status: fixture.status
+        } : null,
+        participants: participantsWithUsers
       }
     });
 

@@ -15,7 +15,6 @@ const Prediction = sequelize.define('Prediction', {
     type: DataTypes.UUID,
     allowNull: false,
   },
-  // Predicciones específicas
   goals_home: {
     type: DataTypes.INTEGER,
     allowNull: false,
@@ -24,14 +23,12 @@ const Prediction = sequelize.define('Prediction', {
     type: DataTypes.INTEGER,
     allowNull: false,
   },
-  // Opcional: primera mitad
   halftime_home: {
     type: DataTypes.INTEGER,
   },
   halftime_away: {
     type: DataTypes.INTEGER,
   },
-  // Puntos obtenidos
   points_goals: {
     type: DataTypes.INTEGER,
     defaultValue: 0,
@@ -55,10 +52,5 @@ const Prediction = sequelize.define('Prediction', {
   timestamps: true,
   tableName: 'predictions',
 });
-
-Prediction.associate = (models) => {
-  Prediction.belongsTo(models.Room, { foreignKey: 'room_id' });
-  Prediction.belongsTo(models.User, { foreignKey: 'user_id' });
-};
 
 module.exports = Prediction;
