@@ -1,8 +1,10 @@
 // /routes/league.js
 const express = require('express');
 const router = express.Router();
-const { UserLeague, Fixture } = require('../models');
-const authMiddleware = require('../middleware/authMiddleware'); // Cambiar a authMiddleware
+// Cambiar la importación - importar directamente los modelos
+const UserLeague = require('../models/UserLeague');
+const Fixture = require('../models/Fixture');
+const authMiddleware = require('../middleware/authMiddleware');
 
 // Obtener todas las ligas activas
 router.get('/', authMiddleware, async (req, res) => {
