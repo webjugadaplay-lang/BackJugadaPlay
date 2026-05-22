@@ -44,7 +44,7 @@ const startServer = async () => {
     console.log('📦 Conectado a PostgreSQL en Render...');
 
     // Sincronizar modelos (sin alter para evitar errores)
-    await sequelize.sync();
+    await sequelize.sync({ alter: true });
     await User.sync();
     await PasswordResetToken.sync();
     await createAdmin();
