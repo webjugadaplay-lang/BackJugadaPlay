@@ -57,114 +57,18 @@ router.get('/rooms/find-by-code', async (req, res) => {
 // ================= PRIVATE =================
 router.use(authMiddleware);
 
-// ===== CONTINENTES =====
-router.get('/continents', async (req, res) => {
-  try {
-    const continents = await Continent.findAll({
-      order: [['name', 'ASC']],
-    });
-    res.json({ success: true, data: continents });
-  } catch (error) {
-    console.error('Error en /continents:', error);
-    res.status(500).json({ success: false });
-  }
-});
 
-// ===== COUNTRIES =====
-router.get('/countries', async (req, res) => {
-  try {
-    const { continentId } = req.query;
-    const where = {};
-    if (continentId) where.continent_id = parseInt(continentId);
-
-    const countries = await Country.findAll({
-      where,
-      order: [['name', 'ASC']],
-    });
-
-    res.json({ success: true, data: countries });
-
-  } catch (error) {
-    console.error('Error en /countries:', error);
-    res.status(500).json({ success: false });
-  }
-});
-
-// ===== TOURNAMENTS =====
-router.get('/tournaments', async (req, res) => {
-  try {
-    const { countryId } = req.query;
-    const where = {};
-    if (countryId) where.country_id = parseInt(countryId);
-
-    const tournaments = await Tournament.findAll({
-      where,
-      include: [{ model: Country, as: 'country' }],
-      order: [['name', 'ASC']],
-    });
-
-    res.json({ success: true, data: tournaments });
-
-  } catch (error) {
-    console.error('Error en /tournaments:', error);
-    res.status(500).json({ success: false });
-  }
-});
-
-// ===== TEAMS =====
-router.get('/teams-by-tournament', async (req, res) => {
-  try {
-    const { tournamentId } = req.query;
-
-    if (!tournamentId) {
-      return res.status(400).json({ success: false });
-    }
-
-    const teams = await Team.findAll({
-      where: { tournament_id: parseInt(tournamentId) },
-      attributes: ['id', 'name'],
-      order: [['name', 'ASC']],
-    });
-
-    res.json({ success: true, data: teams });
-
-  } catch (error) {
-    console.error('Error en /teams-by-tournament:', error);
-    res.status(500).json({ success: false });
-  }
-});
-
-// ================= ENDPOINT QUE FALTA (AGREGAR ESTO) =================
+// ===== ROOM BY ID - VERSIÓN CORREGIDA =====
 router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   try {
     const { roomId } = req.params;
     
-    console.log("🔍 Buscando sala:", roomId);
+    console.log("🔍 [FIX] Buscando sala:", roomId);
 
-    const query = `
-      SELECT 
-        r.id,
-        r.name,
-        r.code,
-        r.entry_fee,
-        r.total_pool,
-        r.status,
-        r.prediction_close_time,
-        f.home_team as team_home,
-        f.away_team as team_away,
-        f.match_date,
-        b.name as bar_name,
-        b.bar_name as bar_business_name
-      FROM rooms r
-      LEFT JOIN fixtures f ON r.fixture_id = f.id
-      LEFT JOIN bars b ON r.bar_id = b.id
-      WHERE r.id = :roomId
-    `;
-
-    const [room] = await sequelize.query(query, {
-      replacements: { roomId },
-      type: sequelize.QueryTypes.SELECT
-    });
+    // Primero, buscar la sala directamente en la tabla rooms
+    const room = await Room.findByPk(roomId);
+    
+    console.log("📦 [FIX] Sala encontrada en rooms:", room ? "SI" : "NO");
 
     if (!room) {
       return res.status(404).json({
@@ -173,31 +77,60 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
       });
     }
 
+    // Respuesta básica con los datos que tenemos
+    const responseData = {
+      id: room.id,
+      name: room.name || 'Partido',
+      team_home: 'Local',
+      team_away: 'Visitante',
+      match_date: room.prediction_close_time || new Date(),
+      prediction_close_time: room.prediction_close_time,
+      entry_fee: room.entry_fee || 0,
+      total_pool: room.total_pool || 0,
+      status: room.status,
+      room_code: room.code,
+      bar: {
+        name: 'Bar'
+      }
+    };
+
+    // Si hay fixture_id, intentar obtener datos del fixture
+    if (room.fixture_id) {
+      try {
+        const fixtureQuery = `
+          SELECT home_team, away_team, match_date 
+          FROM fixtures 
+          WHERE id = :fixtureId
+        `;
+        
+        const [fixture] = await sequelize.query(fixtureQuery, {
+          replacements: { fixtureId: room.fixture_id },
+          type: sequelize.QueryTypes.SELECT
+        });
+        
+        if (fixture) {
+          responseData.team_home = fixture.home_team || 'Local';
+          responseData.team_away = fixture.away_team || 'Visitante';
+          responseData.match_date = fixture.match_date || responseData.match_date;
+        }
+      } catch (fixtureError) {
+        console.log("No se pudo obtener fixture:", fixtureError.message);
+      }
+    }
+
+    console.log("✅ [FIX] Datos enviados:", responseData);
+
     res.json({ 
       success: true, 
-      data: {
-        id: room.id,
-        name: room.name,
-        team_home: room.team_home || 'Local',
-        team_away: room.team_away || 'Visitante',
-        match_date: room.match_date || room.prediction_close_time,
-        prediction_close_time: room.prediction_close_time,
-        entry_fee: room.entry_fee,
-        total_pool: room.total_pool,
-        status: room.status,
-        room_code: room.code,
-        bar: {
-          name: room.bar_name,
-          bar_name: room.bar_business_name
-        }
-      }
+      data: responseData 
     });
 
   } catch (error) {
     console.error('Error en GET /rooms/:roomId:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al obtener la sala'
+      message: 'Error al obtener la sala',
+      error: error.message
     });
   }
 });
