@@ -3,6 +3,7 @@ const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 
 // Modelos
+const sequelize = require('../config/database');
 const Continent = require('../models/Continent');
 const Country = require('../models/Country');
 const Tournament = require('../models/Tournament');
@@ -137,11 +138,10 @@ router.get('/teams-by-tournament', async (req, res) => {
   }
 });
 
-// ===== ROOM BY ID PARA JUGADORES (FIX DEFINITIVO) =====
+// ================= ENDPOINT QUE FALTA (AGREGAR ESTO) =================
 router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   try {
     const { roomId } = req.params;
-    const sequelize = require('../config/database');
     
     console.log("🔍 Buscando sala:", roomId);
 
@@ -198,7 +198,7 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error en GET /rooms/:roomId:', error);
     res.status(500).json({
       success: false,
       message: 'Error al obtener la sala'

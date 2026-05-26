@@ -17,7 +17,7 @@ const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const leagueRoutes = require('./routes/league');
 const barRoutes = require('./routes/barRoutes');
-const apiRoutes = require('./routes/api');
+const apiRoutes = require('./routes/apiRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 10000; // Render espera 10000 por defecto
