@@ -137,15 +137,14 @@ router.get('/teams-by-tournament', async (req, res) => {
   }
 });
 
-//===== ROOM WITH FIXTURE DATA =====
+// ===== ROOM BY ID PARA JUGADORES (FIX DEFINITIVO) =====
 router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   try {
     const { roomId } = req.params;
     const sequelize = require('../config/database');
+    
+    console.log("🔍 Buscando sala:", roomId);
 
-    console.log("🔍 Buscando sala con ID:", roomId);
-
-    // Consulta SQL que une rooms con fixtures
     const query = `
       SELECT 
         r.id,
@@ -154,15 +153,10 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
         r.entry_fee,
         r.total_pool,
         r.status,
-        r.max_participants,
-        r.current_participants,
         r.prediction_close_time,
-        r.fixture_id,
         f.home_team as team_home,
         f.away_team as team_away,
         f.match_date,
-        f.match_date as match_date_raw,
-        b.id as bar_id,
         b.name as bar_name,
         b.bar_name as bar_business_name
       FROM rooms r
@@ -176,8 +170,6 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
       type: sequelize.QueryTypes.SELECT
     });
 
-    console.log("📦 Sala encontrada:", room ? room.id : "NO ENCONTRADA");
-
     if (!room) {
       return res.status(404).json({
         success: false,
@@ -185,38 +177,31 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
       });
     }
 
-    // Formatear la respuesta como espera el frontend
-    const responseData = {
-      id: room.id,
-      name: room.name,
-      team_home: room.team_home || 'Local',
-      team_away: room.team_away || 'Visitante',
-      match_date: room.match_date || room.prediction_close_time,
-      prediction_close_time: room.prediction_close_time,
-      entry_fee: room.entry_fee,
-      total_pool: room.total_pool,
-      status: room.status,
-      room_code: room.code,
-      bar: {
-        id: room.bar_id,
-        name: room.bar_name,
-        bar_name: room.bar_business_name
+    res.json({ 
+      success: true, 
+      data: {
+        id: room.id,
+        name: room.name,
+        team_home: room.team_home || 'Local',
+        team_away: room.team_away || 'Visitante',
+        match_date: room.match_date || room.prediction_close_time,
+        prediction_close_time: room.prediction_close_time,
+        entry_fee: room.entry_fee,
+        total_pool: room.total_pool,
+        status: room.status,
+        room_code: room.code,
+        bar: {
+          name: room.bar_name,
+          bar_name: room.bar_business_name
+        }
       }
-    };
-
-    console.log("✅ Datos enviados:", responseData);
-
-    res.json({
-      success: true,
-      data: responseData
     });
 
   } catch (error) {
-    console.error('Error en /rooms/:roomId:', error);
+    console.error('Error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al obtener la sala',
-      error: error.message
+      message: 'Error al obtener la sala'
     });
   }
 });

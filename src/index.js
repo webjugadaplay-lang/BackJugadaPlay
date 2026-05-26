@@ -17,6 +17,7 @@ const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const leagueRoutes = require('./routes/league');
 const barRoutes = require('./routes/barRoutes');
+const apiRoutes = require('./routes/api');
 
 const app = express();
 const PORT = process.env.PORT || 10000; // Render espera 10000 por defecto
@@ -31,6 +32,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/league', leagueRoutes);
 app.use('/api/bar', barRoutes);
+app.use('/api', apiRoutes);
 
 // Ruta de prueba
 app.get('/health', (req, res) => {
