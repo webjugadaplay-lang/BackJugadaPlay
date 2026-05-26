@@ -4,10 +4,6 @@ const authMiddleware = require('../middleware/authMiddleware');
 
 // Modelos
 const sequelize = require('../config/database');
-const Continent = require('../models/Continent');
-const Country = require('../models/Country');
-const Tournament = require('../models/Tournament');
-const Team = require('../models/Team');
 const Room = require('../models/Room');
 const Prediction = require('../models/Prediction');
 const User = require('../models/User');
