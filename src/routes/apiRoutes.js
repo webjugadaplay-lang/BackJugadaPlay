@@ -137,36 +137,87 @@ router.get('/teams-by-tournament', async (req, res) => {
   }
 });
 
-// ===== ROOM BY ID =====
+//===== ROOM WITH FIXTURE DATA =====
 router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   try {
     const { roomId } = req.params;
-    
-    // Buscar con CAST para asegurar el tipo
-    const room = await Room.findOne({
-      where: sequelize.where(
-        sequelize.cast(sequelize.col('id'), 'VARCHAR'),
-        roomId
-      )
+    const sequelize = require('../config/database');
+
+    console.log("🔍 Buscando sala con ID:", roomId);
+
+    // Consulta SQL que une rooms con fixtures
+    const query = `
+      SELECT 
+        r.id,
+        r.name,
+        r.code,
+        r.entry_fee,
+        r.total_pool,
+        r.status,
+        r.max_participants,
+        r.current_participants,
+        r.prediction_close_time,
+        r.fixture_id,
+        f.home_team as team_home,
+        f.away_team as team_away,
+        f.match_date,
+        f.match_date as match_date_raw,
+        b.id as bar_id,
+        b.name as bar_name,
+        b.bar_name as bar_business_name
+      FROM rooms r
+      LEFT JOIN fixtures f ON r.fixture_id = f.id
+      LEFT JOIN bars b ON r.bar_id = b.id
+      WHERE r.id = :roomId
+    `;
+
+    const [room] = await sequelize.query(query, {
+      replacements: { roomId },
+      type: sequelize.QueryTypes.SELECT
     });
-    
-    // O búsqueda directa
-    const roomDirect = await Room.findByPk(roomId);
-    
-    console.log("Búsqueda directa:", roomDirect ? "OK" : "NO");
-    
-    if (!roomDirect) {
+
+    console.log("📦 Sala encontrada:", room ? room.id : "NO ENCONTRADA");
+
+    if (!room) {
       return res.status(404).json({
         success: false,
-        message: `Sala no encontrada: ${roomId}`
+        message: 'Sala no encontrada'
       });
     }
-    
-    res.json({ success: true, data: roomDirect });
-    
+
+    // Formatear la respuesta como espera el frontend
+    const responseData = {
+      id: room.id,
+      name: room.name,
+      team_home: room.team_home || 'Local',
+      team_away: room.team_away || 'Visitante',
+      match_date: room.match_date || room.prediction_close_time,
+      prediction_close_time: room.prediction_close_time,
+      entry_fee: room.entry_fee,
+      total_pool: room.total_pool,
+      status: room.status,
+      room_code: room.code,
+      bar: {
+        id: room.bar_id,
+        name: room.bar_name,
+        bar_name: room.bar_business_name
+      }
+    };
+
+    console.log("✅ Datos enviados:", responseData);
+
+    res.json({
+      success: true,
+      data: responseData
+    });
+
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error en /rooms/:roomId:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener la sala',
+      error: error.message
+    });
   }
 });
 
@@ -318,12 +369,12 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
   function getEmojiAndStatus(totalError, predHome, predAway, realHome, realAway) {
     const realWinner = realHome > realAway ? 'home' : (realAway > realHome ? 'away' : 'draw');
     const predWinner = predHome > predAway ? 'home' : (predAway > predHome ? 'away' : 'draw');
-    
+
     // Si el usuario ya no puede acertar el ganador
     if (realWinner !== 'draw' && predWinner !== realWinner) {
       return { emoji: '🥶', status: 'Muerto' };
     }
-    
+
     // Si puede acertar el ganador, evaluar por error
     if (totalError === 0) return { emoji: '🥳', status: 'Excelente' };
     if (totalError === 1) return { emoji: '😁', status: 'Bien' };
@@ -338,7 +389,7 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
     const errorAway = Math.abs(pred.score_away - realAway);
     const totalError = errorHome + errorAway;
     const { emoji, status } = getEmojiAndStatus(totalError, pred.score_home, pred.score_away, realHome, realAway);
-    
+
     return {
       user_id: pred.user_id,
       user_name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
@@ -352,7 +403,7 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
   });
 
   ranking.sort((a, b) => a.total_error - b.total_error);
-  
+
   return ranking.map((item, idx) => ({
     ...item,
     position: idx + 1
