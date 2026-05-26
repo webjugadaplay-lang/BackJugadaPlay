@@ -141,81 +141,32 @@ router.get('/teams-by-tournament', async (req, res) => {
 router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   try {
     const { roomId } = req.params;
-
-    console.log("🔍 Buscando sala con ID:", roomId);
-
-    if (!roomId || roomId === 'undefined') {
-      return res.status(400).json({
-        success: false,
-        message: 'ID de sala inválido'
-      });
-    }
-
-    // Buscar la sala incluyendo el fixture relacionado
-    const room = await Room.findByPk(roomId, {
-      include: [
-        {
-          model: User,
-          as: 'bar',
-          attributes: ['id', 'name', 'bar_name']
-        },
-        {
-          model: Fixture, // ← Importante: incluir el fixture
-          as: 'fixture',  // ← Asegúrate que el alias sea correcto
-          attributes: ['id', 'home_team', 'away_team', 'match_date', 'status']
-        }
-      ],
-      attributes: [
-        'id',
-        'name',
-        'code',
-        'entry_fee',
-        'total_pool',
-        'status',
-        'max_participants',
-        'current_participants',
-        'prediction_close_time'
-      ]
+    
+    // Buscar con CAST para asegurar el tipo
+    const room = await Room.findOne({
+      where: sequelize.where(
+        sequelize.cast(sequelize.col('id'), 'VARCHAR'),
+        roomId
+      )
     });
-
-    if (!room) {
+    
+    // O búsqueda directa
+    const roomDirect = await Room.findByPk(roomId);
+    
+    console.log("Búsqueda directa:", roomDirect ? "OK" : "NO");
+    
+    if (!roomDirect) {
       return res.status(404).json({
         success: false,
-        message: 'Sala no encontrada'
+        message: `Sala no encontrada: ${roomId}`
       });
     }
-
-    // Construir la respuesta con los datos del fixture
-    const responseData = {
-      id: room.id,
-      name: room.name,
-      code: room.code,
-      team_home: room.fixture?.home_team || 'Local',
-      team_away: room.fixture?.away_team || 'Visitante',
-      match_date: room.fixture?.match_date || room.prediction_close_time,
-      entry_fee: room.entry_fee,
-      total_pool: room.total_pool,
-      status: room.status,
-      max_participants: room.max_participants,
-      current_participants: room.current_participants,
-      prediction_close_time: room.prediction_close_time,
-      bar: room.bar
-    };
-
-    console.log("✅ Sala encontrada:", responseData);
-
-    res.json({ 
-      success: true, 
-      data: responseData 
-    });
-
+    
+    res.json({ success: true, data: roomDirect });
+    
   } catch (error) {
-    console.error('Error en /rooms/:roomId:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener la sala',
-      error: error.message
-    });
+    console.error('Error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
