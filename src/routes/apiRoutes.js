@@ -57,7 +57,6 @@ router.get('/rooms/find-by-code', async (req, res) => {
 // ================= PRIVATE =================
 router.use(authMiddleware);
 
-
 // ===== ROOM BY ID - VERSIÓN CORREGIDA =====
 router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   try {
@@ -98,7 +97,7 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
     if (room.fixture_id) {
       try {
         const fixtureQuery = `
-          SELECT home_team, away_team, match_date 
+          SELECT home_team_name, away_team_name, match_date 
           FROM fixtures 
           WHERE id = :fixtureId
         `;
@@ -109,8 +108,8 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
         });
         
         if (fixture) {
-          responseData.team_home = fixture.home_team || 'Local';
-          responseData.team_away = fixture.away_team || 'Visitante';
+          responseData.team_home = fixture.home_team_name || 'Local';
+          responseData.team_away = fixture.away_team_name || 'Visitante';
           responseData.match_date = fixture.match_date || responseData.match_date;
         }
       } catch (fixtureError) {
@@ -135,7 +134,7 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   }
 });
 
-// ===== GET EXISTING PREDICTION =====
+// ===== GET EXISTING PREDICTION - CORREGIDO =====
 router.get('/player/prediction/:roomId', async (req, res) => {
   try {
     const userId = req.user.id;
@@ -150,12 +149,13 @@ router.get('/player/prediction/:roomId', async (req, res) => {
       });
     }
 
+    // ✅ CORREGIDO: Usar goals_home, goals_away, is_paid en lugar de score_home, score_away, paid
     const prediction = await Prediction.findOne({
       where: {
         user_id: userId,
         room_id: roomId
       },
-      attributes: ['id', 'score_home', 'score_away', 'paid']
+      attributes: ['id', 'goals_home', 'goals_away', 'is_paid']
     });
 
     if (!prediction) {
@@ -165,9 +165,15 @@ router.get('/player/prediction/:roomId', async (req, res) => {
       });
     }
 
+    // ✅ CORREGIDO: Mapear los nombres para mantener compatibilidad con el frontend
     return res.json({
       success: true,
-      data: prediction
+      data: {
+        id: prediction.id,
+        score_home: prediction.goals_home,
+        score_away: prediction.goals_away,
+        paid: prediction.is_paid
+      }
     });
 
   } catch (error) {
@@ -179,7 +185,7 @@ router.get('/player/prediction/:roomId', async (req, res) => {
   }
 });
 
-// ===== GET ALL PLAYER PREDICTIONS =====
+// ===== GET ALL PLAYER PREDICTIONS - CORREGIDO =====
 router.get('/player/predictions', async (req, res) => {
   try {
     const userId = req.user.id;
@@ -207,9 +213,21 @@ router.get('/player/predictions', async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
+    // ✅ CORREGIDO: Mapear los datos para mantener compatibilidad
+    const formattedPredictions = predictions.map(pred => ({
+      id: pred.id,
+      room_id: pred.room_id,
+      score_home: pred.goals_home,
+      score_away: pred.goals_away,
+      paid: pred.is_paid,
+      createdAt: pred.createdAt,
+      updatedAt: pred.updatedAt,
+      room: pred.room
+    }));
+
     return res.json({
       success: true,
-      data: predictions
+      data: formattedPredictions
     });
   } catch (error) {
     console.error('Error en GET /player/predictions:', error);
@@ -220,11 +238,16 @@ router.get('/player/predictions', async (req, res) => {
   }
 });
 
-// ===== SAVE / UPDATE PREDICTION =====
+// ===== SAVE / UPDATE PREDICTION - CORREGIDO =====
 router.post('/player/prediction', async (req, res) => {
   try {
     const userId = req.user.id;
-    const { room_id, score_home, score_away } = req.body;
+    // ✅ CORREGIDO: Aceptar ambos nombres de campo para compatibilidad
+    const { room_id, score_home, score_away, goals_home, goals_away } = req.body;
+    
+    // Usar goals_home/away si vienen, sino usar score_home/away
+    const finalGoalsHome = goals_home !== undefined ? goals_home : score_home;
+    const finalGoalsAway = goals_away !== undefined ? goals_away : score_away;
 
     if (!room_id) {
       return res.status(400).json({
@@ -247,18 +270,32 @@ router.post('/player/prediction', async (req, res) => {
     });
 
     if (prediction) {
-      await prediction.update({ score_home, score_away });
+      // ✅ CORREGIDO: Usar goals_home y goals_away
+      await prediction.update({ 
+        goals_home: finalGoalsHome, 
+        goals_away: finalGoalsAway 
+      });
     } else {
+      // ✅ CORREGIDO: Usar goals_home, goals_away, is_paid
       prediction = await Prediction.create({
         user_id: userId,
         room_id,
-        score_home,
-        score_away,
-        paid: false
+        goals_home: finalGoalsHome,
+        goals_away: finalGoalsAway,
+        is_paid: false
       });
     }
 
-    res.json({ success: true, data: prediction });
+    // ✅ CORREGIDO: Respuesta con nombres compatibles
+    res.json({ 
+      success: true, 
+      data: {
+        id: prediction.id,
+        score_home: prediction.goals_home,
+        score_away: prediction.goals_away,
+        paid: prediction.is_paid
+      }
+    });
 
   } catch (error) {
     console.error('Error en /player/prediction:', error);
@@ -269,7 +306,7 @@ router.post('/player/prediction', async (req, res) => {
   }
 });
 
-// ===== FUNCIÓN AUXILIAR PARA CALCULAR RANKING CON EMOJIS =====
+// ===== FUNCIÓN AUXILIAR PARA CALCULAR RANKING CON EMOJIS - CORREGIDA =====
 async function calculateLiveRanking(roomId, realHome, realAway) {
   const predictions = await Prediction.findAll({
     where: { room_id: roomId },
@@ -299,16 +336,17 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
   }
 
   const ranking = predictions.map(pred => {
-    const errorHome = Math.abs(pred.score_home - realHome);
-    const errorAway = Math.abs(pred.score_away - realAway);
+    // ✅ CORREGIDO: Usar goals_home y goals_away
+    const errorHome = Math.abs(pred.goals_home - realHome);
+    const errorAway = Math.abs(pred.goals_away - realAway);
     const totalError = errorHome + errorAway;
-    const { emoji, status } = getEmojiAndStatus(totalError, pred.score_home, pred.score_away, realHome, realAway);
+    const { emoji, status } = getEmojiAndStatus(totalError, pred.goals_home, pred.goals_away, realHome, realAway);
 
     return {
       user_id: pred.user_id,
       user_name: pred.User?.player_nickname || pred.User?.name || 'Jugador',
-      score_home: pred.score_home,
-      score_away: pred.score_away,
+      score_home: pred.goals_home,
+      score_away: pred.goals_away,
       total_error: totalError,
       emoji: emoji,
       status: status,
@@ -324,7 +362,7 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
   }));
 }
 
-// Obtener sala en vivo con ranking pre-calculado
+// Obtener sala en vivo con ranking pre-calculado - CORREGIDO
 router.get('/player/live-room/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
@@ -349,7 +387,7 @@ router.get('/player/live-room/:roomId', async (req, res) => {
     // Encontrar posición del usuario
     const userPosition = ranking.findIndex(r => r.user_id === userId);
 
-    // Obtener predicción del usuario
+    // Obtener predicción del usuario - CORREGIDO
     const userPrediction = await Prediction.findOne({
       where: {
         user_id: userId,
@@ -379,82 +417,8 @@ router.get('/player/live-room/:roomId', async (req, res) => {
           status: r.status || ''
         })),
         userPrediction: userPrediction ? {
-          score_home: userPrediction.score_home,
-          score_away: userPrediction.score_away
-        } : null,
-        userPosition: userPosition + 1,
-        totalPlayers: ranking.length
-      }
-    };
-
-    return res.json(responseData);
-
-  } catch (error) {
-    console.error('Error en GET /player/live-room/:roomId:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Error al cargar la sala en vivo'
-    });
-  }
-});
-
-// Obtener sala en vivo con ranking pre-calculado
-router.get('/player/live-room/:roomId', async (req, res) => {
-  try {
-    const { roomId } = req.params;
-    const userId = req.user.id;
-
-    const room = await Room.findByPk(roomId);
-
-    if (!room) {
-      return res.status(404).json({
-        success: false,
-        message: 'Sala no encontrada'
-      });
-    }
-
-    // Usar ranking pre-calculado si existe, sino calcularlo
-    let ranking = room.live_ranking || [];
-
-    if (ranking.length === 0) {
-      ranking = await calculateLiveRanking(roomId, room.current_score_home, room.current_score_away);
-    }
-
-    // Encontrar posición del usuario
-    const userPosition = ranking.findIndex(r => r.user_id === userId);
-
-    // Obtener predicción del usuario
-    const userPrediction = await Prediction.findOne({
-      where: {
-        user_id: userId,
-        room_id: roomId
-      }
-    });
-
-    const responseData = {
-      success: true,
-      data: {
-        id: room.id,
-        team_home: room.team_home,
-        team_away: room.team_away,
-        match_date: room.match_date,
-        current_score_home: room.current_score_home,
-        current_score_away: room.current_score_away,
-        status: room.status,
-        entry_fee: room.entry_fee,
-        total_pool: room.total_pool,
-        ranking: ranking.map(r => ({
-          userId: r.user_id,
-          name: r.user_name,
-          prediction: `${r.score_home} x ${r.score_away}`,
-          isUser: r.user_id === userId,
-          position: r.position,
-          emoji: r.emoji || '⚽',     // ← AGREGAR ESTO
-          status: r.status || ''      // ← AGREGAR ESTO
-        })),
-        userPrediction: userPrediction ? {
-          score_home: userPrediction.score_home,
-          score_away: userPrediction.score_away
+          score_home: userPrediction.goals_home,
+          score_away: userPrediction.goals_away
         } : null,
         userPosition: userPosition + 1,
         totalPlayers: ranking.length

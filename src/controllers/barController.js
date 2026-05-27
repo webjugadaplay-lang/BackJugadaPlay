@@ -13,21 +13,21 @@ exports.getBarStats = async (req, res) => {
     const { barId } = req.query;
     const userId = req.user.id;
     const userRole = req.user.role;
-    
+
     let targetBarId = barId;
-    
+
     // Si el usuario es bar (rol 'bar'), usar su ID como barId
     if (userRole === 'bar') {
       targetBarId = userId;
     }
-    
+
     if (!targetBarId) {
       return res.status(400).json({
         success: false,
         message: 'barId es requerido para owners'
       });
     }
-    
+
     // Verificar que el bar pertenece al owner (si es owner)
     if (userRole === 'owner') {
       const bar = await Bar.findOne({
@@ -40,7 +40,7 @@ exports.getBarStats = async (req, res) => {
         });
       }
     }
-    
+
     // Obtener datos del bar
     const bar = await Bar.findByPk(targetBarId);
     if (!bar) {
@@ -49,7 +49,7 @@ exports.getBarStats = async (req, res) => {
         message: 'Bar no encontrado'
       });
     }
-    
+
     // Contar salas activas
     const activeRooms = await Room.count({
       where: {
@@ -58,7 +58,7 @@ exports.getBarStats = async (req, res) => {
         match_date: { [Op.gte]: new Date() }
       },
     });
-    
+
     // Contar jugadores únicos
     const totalPlayers = await Prediction.count({
       distinct: true,
@@ -68,13 +68,13 @@ exports.getBarStats = async (req, res) => {
         where: { bar_id: targetBarId }
       }]
     });
-    
+
     // Calcular recaudado hoy
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     const todayRevenueResult = await Prediction.sum('entry_fee', {
       include: [{
         model: Room,
@@ -85,7 +85,7 @@ exports.getBarStats = async (req, res) => {
       }
     });
     const todayRevenue = todayRevenueResult || 0;
-    
+
     // Total recaudado
     const totalRevenueResult = await Prediction.sum('entry_fee', {
       include: [{
@@ -94,12 +94,12 @@ exports.getBarStats = async (req, res) => {
       }]
     });
     const totalRevenue = totalRevenueResult || 0;
-    
+
     // Ranking (simplificado por ahora)
     const ranking = [
       { name: 'Sin datos', predictions: 0 }
     ];
-    
+
     res.json({
       success: true,
       data: {
@@ -133,21 +133,21 @@ exports.getBarRooms = async (req, res) => {
     const { barId, status } = req.query;
     const userId = req.user.id;
     const userRole = req.user.role;
-    
+
     let targetBarId = barId;
-    
+
     // Si el usuario es bar, usar su ID
     if (userRole === 'bar') {
       targetBarId = userId;
     }
-    
+
     if (!targetBarId) {
       return res.status(400).json({
         success: false,
         message: 'barId es requerido para owners'
       });
     }
-    
+
     // Verificar permisos para owner
     if (userRole === 'owner') {
       const bar = await Bar.findOne({
@@ -160,10 +160,10 @@ exports.getBarRooms = async (req, res) => {
         });
       }
     }
-    
+
     const where = { bar_id: targetBarId };
     const now = new Date();
-    
+
     if (status === 'active') {
       where.match_date = { [Op.gte]: now };
       where.status = 'active';
@@ -171,12 +171,12 @@ exports.getBarRooms = async (req, res) => {
       where.match_date = { [Op.gt]: now };
       where.status = 'pending';
     }
-    
+
     const rooms = await Room.findAll({
       where,
       order: [['match_date', 'ASC']],
     });
-    
+
     // Formatear datos y contar jugadores
     const formattedRooms = await Promise.all(rooms.map(async (room) => {
       const playerCount = await Prediction.count({
@@ -184,7 +184,7 @@ exports.getBarRooms = async (req, res) => {
         col: 'user_id',
         where: { room_id: room.id }
       });
-      
+
       return {
         id: room.id,
         partido: `${room.team_home} vs ${room.team_away}`,
@@ -194,7 +194,7 @@ exports.getBarRooms = async (req, res) => {
         status: room.status,
       };
     }));
-    
+
     res.json({
       success: true,
       data: formattedRooms,
@@ -214,21 +214,21 @@ exports.createRoom = async (req, res) => {
     const { barId, name, sport, tournament, team_home, team_away, match_date, prediction_close_time, entry_fee } = req.body;
     const userId = req.user.id;
     const userRole = req.user.role;
-    
+
     let targetBarId = barId;
-    
+
     // Si es bar, usar su ID
     if (userRole === 'bar') {
       targetBarId = userId;
     }
-    
+
     if (!targetBarId) {
       return res.status(400).json({
         success: false,
         message: 'barId es requerido'
       });
     }
-    
+
     // Verificar que el bar pertenece al owner
     if (userRole === 'owner') {
       const bar = await Bar.findOne({
@@ -241,7 +241,7 @@ exports.createRoom = async (req, res) => {
         });
       }
     }
-    
+
     // Validaciones
     if (!team_home || !team_away || !match_date) {
       return res.status(400).json({
@@ -249,7 +249,7 @@ exports.createRoom = async (req, res) => {
         message: 'Los nombres de los equipos y la fecha son obligatorios',
       });
     }
-    
+
     // Crear la sala
     const room = await Room.create({
       bar_id: targetBarId,
@@ -264,11 +264,11 @@ exports.createRoom = async (req, res) => {
       status: 'active',
       total_pool: 0,
     });
-    
+
     // Generar código de sala (primeros 6 caracteres del ID)
     const roomCode = room.id.substring(0, 6).toUpperCase();
     await room.update({ room_code: roomCode });
-    
+
     res.status(201).json({
       success: true,
       data: room,
@@ -290,16 +290,16 @@ exports.getRoomDetails = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
     const userRole = req.user.role;
-    
+
     const room = await Room.findByPk(id);
-    
+
     if (!room) {
       return res.status(404).json({
         success: false,
         message: 'Sala no encontrada',
       });
     }
-    
+
     // Verificar permisos
     if (userRole === 'owner') {
       const bar = await Bar.findOne({
@@ -317,7 +317,7 @@ exports.getRoomDetails = async (req, res) => {
         message: 'No tienes permiso para ver esta sala'
       });
     }
-    
+
     res.json({
       success: true,
       data: {
@@ -347,16 +347,16 @@ exports.closePredictions = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
     const userRole = req.user.role;
-    
+
     const room = await Room.findByPk(id);
-    
+
     if (!room) {
       return res.status(404).json({
         success: false,
         message: 'Sala no encontrada',
       });
     }
-    
+
     // Verificar permisos
     if (userRole === 'owner') {
       const bar = await Bar.findOne({
@@ -374,9 +374,9 @@ exports.closePredictions = async (req, res) => {
         message: 'No tienes permiso para cerrar esta sala'
       });
     }
-    
+
     await room.update({ status: 'closed' });
-    
+
     res.json({
       success: true,
       message: 'Predicciones cerradas exitosamente',
@@ -398,9 +398,9 @@ exports.getOwnerBars = async (req, res) => {
 
     // Verificar que el usuario es owner
     if (userRole !== 'owner') {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Acceso denegado. Solo owners pueden ver sus bares.' 
+      return res.status(403).json({
+        success: false,
+        message: 'Acceso denegado. Solo owners pueden ver sus bares.'
       });
     }
 
@@ -425,9 +425,9 @@ exports.getOwnerBars = async (req, res) => {
 
   } catch (error) {
     console.error('Error en getOwnerBars:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Error al cargar los bares' 
+    return res.status(500).json({
+      success: false,
+      message: 'Error al cargar los bares'
     });
   }
 };
