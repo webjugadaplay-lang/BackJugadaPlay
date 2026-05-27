@@ -7,6 +7,59 @@ let lastUpdateTime = 0;
 const UPDATE_INTERVAL = 60000; // 60 segundos - Actualiza máximo 1 vez por minuto
 let isUpdating = false; // Evita actualizaciones concurrentes
 
+// Función para actualizar salas expiradas
+async function updateExpiredRooms() {
+  try {
+    const now = Date.now();
+    
+    // Solo actualizar si pasó el tiempo mínimo
+    if (now - lastUpdateTime < UPDATE_INTERVAL) {
+      return 0;
+    }
+    
+    // Evitar actualizaciones concurrentes
+    if (isUpdating) {
+      return 0;
+    }
+    
+    isUpdating = true;
+    
+    const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000);
+    
+    // Actualizar todas las salas activas que cumplen la condición
+    const [updatedCount] = await Room.update(
+      {
+        status: 'finished'
+      },
+      {
+        where: {
+          status: 'active',
+          prediction_close_time: {
+            [Op.lte]: twoHoursAgo
+          }
+        },
+        hooks: false,
+        silent: true,
+        logging: false
+      }
+    );
+    
+    if (updatedCount > 0) {
+      console.log(`🔄 ${updatedCount} sala(s) actualizadas a "finished"`);
+    }
+    
+    lastUpdateTime = now;
+    return updatedCount;
+    
+  } catch (error) {
+    console.error('❌ Error actualizando salas:', error);
+    return 0;
+  } finally {
+    isUpdating = false;
+  }
+}
+
+// Definir el modelo
 const Room = sequelize.define('Room', {
   id: {
     type: DataTypes.UUID,
@@ -65,107 +118,6 @@ const Room = sequelize.define('Room', {
 }, {
   timestamps: true,
   tableName: 'rooms',
-  hooks: {
-    // ✅ Hook que se ejecuta ANTES de cualquier consulta SELECT
-    beforeFind: async (options) => {
-      try {
-        const now = Date.now();
-        
-        // CRÍTICO: Solo actualizar si pasó el tiempo mínimo (1 minuto)
-        if (now - lastUpdateTime < UPDATE_INTERVAL) {
-          return; // No actualizar, es muy pronto
-        }
-        
-        // CRÍTICO: Evitar actualizaciones concurrentes
-        if (isUpdating) {
-          return; // Ya hay una actualización en curso
-        }
-        
-        isUpdating = true;
-        
-        const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000);
-        
-        // Actualizar todas las salas activas que cumplen la condición
-        const [updatedCount] = await Room.update(
-          {
-            status: 'finished'
-          },
-          {
-            where: {
-              status: 'active',
-              prediction_close_time: {
-                [Op.lte]: twoHoursAgo
-              }
-            },
-            hooks: false, // CRÍTICO: Evitar loop infinito
-            silent: true,  // No disparar validaciones
-            logging: false // Opcional: No loggear esta consulta
-          }
-        );
-        
-        if (updatedCount > 0) {
-          console.log(`🔄 [beforeFind] ${updatedCount} sala(s) actualizadas a "finished"`);
-        }
-        
-        // Actualizar timestamp de última ejecución
-        lastUpdateTime = now;
-        
-      } catch (error) {
-        console.error('❌ Error en hook beforeFind de Room:', error);
-      } finally {
-        // CRÍTICO: Siempre liberar el lock
-        isUpdating = false;
-      }
-    },
-    
-    // ✅ Hook para findByPk (mismo control de frecuencia)
-    beforeFindByPk: async (options) => {
-      try {
-        const now = Date.now();
-        
-        // CRÍTICO: Solo actualizar si pasó el tiempo mínimo
-        if (now - lastUpdateTime < UPDATE_INTERVAL) {
-          return;
-        }
-        
-        if (isUpdating) {
-          return;
-        }
-        
-        isUpdating = true;
-        
-        const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000);
-        
-        const [updatedCount] = await Room.update(
-          {
-            status: 'finished'
-          },
-          {
-            where: {
-              status: 'active',
-              prediction_close_time: {
-                [Op.lte]: twoHoursAgo
-              }
-            },
-            hooks: false,
-            silent: true,
-            logging: false
-          }
-        );
-        
-        if (updatedCount > 0) {
-          console.log(`🔄 [beforeFindByPk] ${updatedCount} sala(s) actualizadas a "finished"`);
-        }
-        
-        lastUpdateTime = now;
-        
-      } catch (error) {
-        console.error('❌ Error en hook beforeFindByPk de Room:', error);
-      } finally {
-        isUpdating = false;
-      }
-    }
-  }
 });
 
 // Establecer la asociación con Fixture
@@ -174,6 +126,36 @@ Room.associate = (models) => {
   Room.belongsTo(models.Fixture, { foreignKey: 'fixture_id' });
   Room.hasMany(models.Prediction, { foreignKey: 'room_id' });
   Room.hasMany(models.RoomParticipant, { foreignKey: 'room_id' });
+};
+
+// ✅ Sobrescribir los métodos de consulta para actualizar automáticamente
+const originalFindAll = Room.findAll.bind(Room);
+const originalFindOne = Room.findOne.bind(Room);
+const originalFindByPk = Room.findByPk.bind(Room);
+const originalFindAndCountAll = Room.findAndCountAll.bind(Room);
+
+// Sobrescribir findAll
+Room.findAll = async function(...args) {
+  await updateExpiredRooms();
+  return originalFindAll(...args);
+};
+
+// Sobrescribir findOne
+Room.findOne = async function(...args) {
+  await updateExpiredRooms();
+  return originalFindOne(...args);
+};
+
+// Sobrescribir findByPk
+Room.findByPk = async function(...args) {
+  await updateExpiredRooms();
+  return originalFindByPk(...args);
+};
+
+// Sobrescribir findAndCountAll
+Room.findAndCountAll = async function(...args) {
+  await updateExpiredRooms();
+  return originalFindAndCountAll(...args);
 };
 
 module.exports = Room;
