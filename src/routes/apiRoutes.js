@@ -62,30 +62,50 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   try {
     const { roomId } = req.params;
     const sequelize = require('../config/database');
-    
-    console.log("🔍 Buscando sala:", roomId);
 
-    // Consulta simple que funcionaba antes
+    console.log("🔍 Buscando sala detallada:", roomId);
+
     const query = `
       SELECT 
         r.id,
-        r.name,
-        r.code,
+        r.name as room_name,
+        r.code as room_code,
         r.entry_fee,
         r.total_pool,
         r.status,
         r.prediction_close_time,
         r.max_participants,
         r.current_participants,
+        r.createdAt as room_created_at,
+        f.id as fixture_id,
         f.home_team as team_home,
         f.away_team as team_away,
         f.match_date,
+        f.status as fixture_status,
+        f.round as fixture_round,
+        f.stadium as fixture_stadium,
+        t.id as tournament_id,
+        t.name as tournament_name,
+        t.logo as tournament_logo,
+        t.season as tournament_season,
+        c.id as country_id,
+        c.name as country_name,
+        c.flag as country_flag,
+        b.id as bar_id,
         b.name as bar_name,
-        b.bar_name as bar_business_name
+        b.bar_name as bar_business_name,
+        b.logo as bar_logo,
+        COUNT(p.id) as total_predictions,
+        SUM(CASE WHEN p.paid = true THEN 1 ELSE 0 END) as paid_predictions
       FROM rooms r
       LEFT JOIN fixtures f ON r.fixture_id = f.id
+      LEFT JOIN tournaments t ON f.tournament_id = t.id
+      LEFT JOIN countries c ON t.country_id = c.id
       LEFT JOIN bars b ON r.bar_id = b.id
+      LEFT JOIN predictions p ON r.id = p.room_id
       WHERE r.id = :roomId
+      GROUP BY 
+        r.id, f.id, t.id, c.id, b.id
     `;
 
     const [room] = await sequelize.query(query, {
@@ -100,25 +120,62 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
       });
     }
 
-    // Respuesta simple que funciona
-    res.json({ 
-      success: true, 
+    // Calcular premio por jugador
+    const prizePerPlayer = room.total_predictions > 0
+      ? Number(room.total_pool) / Number(room.total_predictions)
+      : 0;
+
+    res.json({
+      success: true,
       data: {
+        // Datos de la sala
         id: room.id,
-        name: room.name || 'Partido',
-        team_home: room.team_home || 'Local',
-        team_away: room.team_away || 'Visitante',
-        match_date: room.match_date || room.prediction_close_time,
-        prediction_close_time: room.prediction_close_time,
-        entry_fee: Number(room.entry_fee) || 0,
-        total_pool: Number(room.total_pool) || 0,
+        name: room.room_name,
+        code: room.room_code,
+        entry_fee: Number(room.entry_fee),
+        total_pool: Number(room.total_pool),
         status: room.status,
-        room_code: room.code,
-        max_participants: room.max_participants || 50,
-        current_participants: room.current_participants || 0,
+        prediction_close_time: room.prediction_close_time,
+        max_participants: room.max_participants,
+        current_participants: room.current_participants,
+
+        // Datos del fixture/partido
+        fixture: {
+          id: room.fixture_id,
+          home_team: room.team_home || 'Local',
+          away_team: room.team_away || 'Visitante',
+          match_date: room.match_date,
+          status: room.fixture_status,
+          round: room.fixture_round,
+          stadium: room.fixture_stadium
+        },
+
+        // Datos del torneo
+        tournament: {
+          id: room.tournament_id,
+          name: room.tournament_name,
+          logo: room.tournament_logo,
+          season: room.tournament_season,
+          country: {
+            name: room.country_name,
+            flag: room.country_flag
+          }
+        },
+
+        // Datos del bar
         bar: {
+          id: room.bar_id,
           name: room.bar_name,
-          bar_name: room.bar_business_name
+          bar_name: room.bar_business_name,
+          logo: room.bar_logo
+        },
+
+        // Estadísticas
+        stats: {
+          total_predictions: Number(room.total_predictions) || 0,
+          paid_predictions: Number(room.paid_predictions) || 0,
+          prize_per_player: prizePerPlayer,
+          available_spots: Math.max(0, room.max_participants - (room.current_participants || 0))
         }
       }
     });
@@ -127,8 +184,7 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
     console.error('Error en GET /rooms/:roomId:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al obtener la sala',
-      error: error.message
+      message: 'Error al obtener la sala'
     });
   }
 });
@@ -178,9 +234,11 @@ router.get('/player/prediction/:roomId', async (req, res) => {
 });
 
 // ===== GET ALL PLAYER PREDICTIONS =====
-router.get('/player/predictions', authMiddleware, async (req, res) => {
+router.get('/player/predictions', async (req, res) => {
   try {
     const userId = req.user.id;
+
+    console.log("🔍 Buscando todas las predicciones del usuario:", userId);
 
     const predictions = await Prediction.findAll({
       where: { user_id: userId },
@@ -188,7 +246,16 @@ router.get('/player/predictions', authMiddleware, async (req, res) => {
         {
           model: Room,
           as: 'room',
-          attributes: ['id', 'name', 'entry_fee', 'total_pool', 'status']
+          attributes: [
+            'id',
+            'name',
+            'team_home',
+            'team_away',
+            'match_date',
+            'entry_fee',
+            'total_pool',
+            'status'
+          ]
         }
       ],
       order: [['createdAt', 'DESC']]
