@@ -57,16 +57,15 @@ router.get('/rooms/find-by-code', async (req, res) => {
 // ================= PRIVATE =================
 router.use(authMiddleware);
 
-// ===== ROOM BY ID - VERSIÓN CORREGIDA =====
+// ===== ROOM BY ID =====
 router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   try {
     const { roomId } = req.params;
-    
+
     console.log("🔍 [FIX] Buscando sala:", roomId);
 
-    // Primero, buscar la sala directamente en la tabla rooms
     const room = await Room.findByPk(roomId);
-    
+
     console.log("📦 [FIX] Sala encontrada en rooms:", room ? "SI" : "NO");
 
     if (!room) {
@@ -76,7 +75,6 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
       });
     }
 
-    // Respuesta básica con los datos que tenemos
     const responseData = {
       id: room.id,
       name: room.name || 'Partido',
@@ -93,7 +91,6 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
       }
     };
 
-    // Si hay fixture_id, intentar obtener datos del fixture
     if (room.fixture_id) {
       try {
         const fixtureQuery = `
@@ -101,12 +98,12 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
           FROM fixtures 
           WHERE id = :fixtureId
         `;
-        
+
         const [fixture] = await sequelize.query(fixtureQuery, {
           replacements: { fixtureId: room.fixture_id },
           type: sequelize.QueryTypes.SELECT
         });
-        
+
         if (fixture) {
           responseData.team_home = fixture.home_team_name || 'Local';
           responseData.team_away = fixture.away_team_name || 'Visitante';
@@ -119,9 +116,9 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
 
     console.log("✅ [FIX] Datos enviados:", responseData);
 
-    res.json({ 
-      success: true, 
-      data: responseData 
+    res.json({
+      success: true,
+      data: responseData
     });
 
   } catch (error) {
@@ -134,103 +131,37 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   }
 });
 
-// ===== GET EXISTING PREDICTION - CORREGIDO =====
-router.get('/player/prediction/:roomId', async (req, res) => {
+// ===== GET - Obtener TODAS las predicciones del usuario para esta sala =====
+router.get('/player/predictions/:roomId', async (req, res) => {
   try {
     const userId = req.user.id;
     const { roomId } = req.params;
 
-    console.log("🔍 Buscando predicción del usuario:", userId, "en sala:", roomId);
+    console.log("🔍 Buscando TODAS las predicciones del usuario:", userId, "para sala:", roomId);
 
-    if (!roomId || roomId === 'undefined') {
-      return res.status(400).json({
-        success: false,
-        message: 'ID de sala inválido'
-      });
-    }
-
-    // ✅ CORREGIDO: Usar goals_home, goals_away, is_paid en lugar de score_home, score_away, paid
-    const prediction = await Prediction.findOne({
+    const predictions = await Prediction.findAll({
       where: {
         user_id: userId,
         room_id: roomId
       },
-      attributes: ['id', 'goals_home', 'goals_away', 'is_paid']
-    });
-
-    if (!prediction) {
-      return res.status(404).json({
-        success: false,
-        message: 'Predicción no encontrada'
-      });
-    }
-
-    // ✅ CORREGIDO: Mapear los nombres para mantener compatibilidad con el frontend
-    return res.json({
-      success: true,
-      data: {
-        id: prediction.id,
-        score_home: prediction.goals_home,
-        score_away: prediction.goals_away,
-        paid: prediction.is_paid
-      }
-    });
-
-  } catch (error) {
-    console.error('Error en GET /player/prediction/:roomId:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Error al obtener la predicción'
-    });
-  }
-});
-
-// ===== GET ALL PLAYER PREDICTIONS - CORREGIDO =====
-router.get('/player/predictions', async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    console.log("🔍 Buscando todas las predicciones del usuario:", userId);
-
-    const predictions = await Prediction.findAll({
-      where: { user_id: userId },
-      include: [
-        {
-          model: Room,
-          as: 'room',
-          attributes: [
-            'id',
-            'name',
-            'team_home',
-            'team_away',
-            'match_date',
-            'entry_fee',
-            'total_pool',
-            'status'
-          ]
-        }
-      ],
+      attributes: ['id', 'goals_home', 'goals_away', 'is_paid', 'createdAt'],
       order: [['createdAt', 'DESC']]
     });
 
-    // ✅ CORREGIDO: Mapear los datos para mantener compatibilidad
-    const formattedPredictions = predictions.map(pred => ({
-      id: pred.id,
-      room_id: pred.room_id,
-      score_home: pred.goals_home,
-      score_away: pred.goals_away,
-      paid: pred.is_paid,
-      createdAt: pred.createdAt,
-      updatedAt: pred.updatedAt,
-      room: pred.room
-    }));
+    console.log(`📦 Encontradas ${predictions.length} predicciones`);
 
-    return res.json({
+    return res.status(200).json({
       success: true,
-      data: formattedPredictions
+      data: predictions.map(p => ({
+        id: p.id,
+        score_home: p.goals_home,
+        score_away: p.goals_away,
+        paid: p.is_paid,
+        created_at: p.createdAt
+      }))
     });
   } catch (error) {
-    console.error('Error en GET /player/predictions:', error);
+    console.error('Error en GET /player/predictions/:roomId:', error);
     return res.status(500).json({
       success: false,
       message: 'Error al obtener las predicciones'
@@ -238,16 +169,13 @@ router.get('/player/predictions', async (req, res) => {
   }
 });
 
-// ===== SAVE / UPDATE PREDICTION - CORREGIDO =====
+// ===== POST - Crear NUEVA predicción (siempre crear, no actualizar) =====
 router.post('/player/prediction', async (req, res) => {
   try {
     const userId = req.user.id;
-    // ✅ CORREGIDO: Aceptar ambos nombres de campo para compatibilidad
-    const { room_id, score_home, score_away, goals_home, goals_away } = req.body;
-    
-    // Usar goals_home/away si vienen, sino usar score_home/away
-    const finalGoalsHome = goals_home !== undefined ? goals_home : score_home;
-    const finalGoalsAway = goals_away !== undefined ? goals_away : score_away;
+    const { room_id, score_home, score_away } = req.body;
+
+    console.log("📝 Creando nueva predicción:", { userId, room_id, score_home, score_away });
 
     if (!room_id) {
       return res.status(400).json({
@@ -256,8 +184,8 @@ router.post('/player/prediction', async (req, res) => {
       });
     }
 
+    // Verificar que la sala existe y está activa
     const room = await Room.findByPk(room_id);
-
     if (!room) {
       return res.status(404).json({
         success: false,
@@ -265,30 +193,35 @@ router.post('/player/prediction', async (req, res) => {
       });
     }
 
-    let prediction = await Prediction.findOne({
-      where: { user_id: userId, room_id }
-    });
-
-    if (prediction) {
-      // ✅ CORREGIDO: Usar goals_home y goals_away
-      await prediction.update({ 
-        goals_home: finalGoalsHome, 
-        goals_away: finalGoalsAway 
-      });
-    } else {
-      // ✅ CORREGIDO: Usar goals_home, goals_away, is_paid
-      prediction = await Prediction.create({
-        user_id: userId,
-        room_id,
-        goals_home: finalGoalsHome,
-        goals_away: finalGoalsAway,
-        is_paid: false
+    // Verificar que el partido no haya empezado o esté cerrado
+    if (room.status === 'finished' || room.status === 'closed') {
+      return res.status(400).json({
+        success: false,
+        message: 'El partido ya finalizó, no se pueden hacer más predicciones'
       });
     }
 
-    // ✅ CORREGIDO: Respuesta con nombres compatibles
-    res.json({ 
-      success: true, 
+    const closeTime = new Date(room.prediction_close_time);
+    if (closeTime < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El tiempo para hacer predicciones ha expirado'
+      });
+    }
+
+    // ✅ SIEMPRE crear una nueva predicción (no actualizar)
+    const prediction = await Prediction.create({
+      user_id: userId,
+      room_id,
+      goals_home: score_home,
+      goals_away: score_away,
+      is_paid: false
+    });
+
+    console.log("✅ Predicción creada con ID:", prediction.id);
+
+    return res.status(201).json({
+      success: true,
       data: {
         id: prediction.id,
         score_home: prediction.goals_home,
@@ -298,15 +231,15 @@ router.post('/player/prediction', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error en /player/prediction:', error);
-    res.status(500).json({
+    console.error('Error en POST /player/prediction:', error);
+    return res.status(500).json({
       success: false,
       message: 'Error al guardar la predicción'
     });
   }
 });
 
-// ===== FUNCIÓN AUXILIAR PARA CALCULAR RANKING CON EMOJIS - CORREGIDA =====
+// ===== FUNCIÓN AUXILIAR PARA CALCULAR RANKING CON EMOJIS =====
 async function calculateLiveRanking(roomId, realHome, realAway) {
   const predictions = await Prediction.findAll({
     where: { room_id: roomId },
@@ -321,12 +254,10 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
     const realWinner = realHome > realAway ? 'home' : (realAway > realHome ? 'away' : 'draw');
     const predWinner = predHome > predAway ? 'home' : (predAway > predHome ? 'away' : 'draw');
 
-    // Si el usuario ya no puede acertar el ganador
     if (realWinner !== 'draw' && predWinner !== realWinner) {
       return { emoji: '🥶', status: 'Muerto' };
     }
 
-    // Si puede acertar el ganador, evaluar por error
     if (totalError === 0) return { emoji: '🥳', status: 'Excelente' };
     if (totalError === 1) return { emoji: '😁', status: 'Bien' };
     if (totalError === 2) return { emoji: '🥲', status: 'Regular' };
@@ -336,7 +267,6 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
   }
 
   const ranking = predictions.map(pred => {
-    // ✅ CORREGIDO: Usar goals_home y goals_away
     const errorHome = Math.abs(pred.goals_home - realHome);
     const errorAway = Math.abs(pred.goals_away - realAway);
     const totalError = errorHome + errorAway;
@@ -362,7 +292,7 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
   }));
 }
 
-// Obtener sala en vivo con ranking pre-calculado - CORREGIDO
+// ===== Obtener sala en vivo con ranking =====
 router.get('/player/live-room/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
@@ -377,22 +307,20 @@ router.get('/player/live-room/:roomId', async (req, res) => {
       });
     }
 
-    // Usar ranking pre-calculado si existe, sino calcularlo
     let ranking = room.live_ranking || [];
 
     if (ranking.length === 0) {
       ranking = await calculateLiveRanking(roomId, room.current_score_home, room.current_score_away);
     }
 
-    // Encontrar posición del usuario
     const userPosition = ranking.findIndex(r => r.user_id === userId);
 
-    // Obtener predicción del usuario - CORREGIDO
     const userPrediction = await Prediction.findOne({
       where: {
         user_id: userId,
         room_id: roomId
-      }
+      },
+      order: [['createdAt', 'DESC']] // La predicción más reciente
     });
 
     const responseData = {
