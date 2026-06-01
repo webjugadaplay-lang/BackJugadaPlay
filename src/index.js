@@ -21,6 +21,10 @@ Room.hasMany(Prediction, { foreignKey: 'room_id', as: 'predictions' });
 User.hasMany(Prediction, { foreignKey: 'user_id', as: 'predictions' });
 Prediction.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
+// Asociación de Room con Fixture
+Room.belongsTo(Fixture, { foreignKey: 'fixture_id', as: 'Fixture' });
+Fixture.hasMany(Room, { foreignKey: 'fixture_id', as: 'rooms' });
+
 // Importar rutas
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
