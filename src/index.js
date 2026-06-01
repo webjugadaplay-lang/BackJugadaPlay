@@ -1,5 +1,3 @@
-//src/index.js
-// src/index.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -11,15 +9,17 @@ const User = require('./models/User');
 const PasswordResetToken = require('./models/PasswordResetToken');
 const Fixture = require('./models/Fixture');
 const UserLeague = require('./models/UserLeague');
-const Room = require('./models/Room'); // ← IMPORTAR ROOM
-const Prediction = require('./models/Prediction'); // ← IMPORTAR PREDICTION
+const Room = require('./models/Room');
+const Prediction = require('./models/Prediction');
 
-// ========== ASOCIACIONES ==========
+// ========== ASOCIACIONES (TODAS AQUÍ) ==========
 // Prediction con Room
 Prediction.belongsTo(Room, { foreignKey: 'room_id', as: 'room' });
 Room.hasMany(Prediction, { foreignKey: 'room_id', as: 'predictions' });
 
-// (Aquí van otras asociaciones si las tienes)
+// User con Prediction (si lo necesitas)
+User.hasMany(Prediction, { foreignKey: 'user_id', as: 'predictions' });
+Prediction.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 // Importar rutas
 const authRoutes = require('./routes/authRoutes');
@@ -48,7 +48,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Backend funcionando correctamente' });
 });
 
-// Endpoint de diagnóstico (temporal)
+// Endpoint de diagnóstico
 app.get('/diagnostic', (req, res) => {
   const dns = require('dns');
   dns.lookup('smtp.gmail.com', { family: 4 }, (err, address) => {
@@ -66,7 +66,6 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('📦 Conectado a PostgreSQL en Render...');
 
-    // Sincronizar modelos (orden importante)
     await sequelize.sync({ alter: true });
     console.log('✅ Base de datos sincronizada');
 
@@ -77,7 +76,7 @@ const startServer = async () => {
       console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
     });
   } catch (error) {
-    console.error('❌ Error conectando a la base de datos:', error);
+    console.error('❌ Error:', error);
     process.exit(1);
   }
 };
