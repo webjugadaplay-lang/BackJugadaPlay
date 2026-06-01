@@ -1,4 +1,5 @@
 //src/index.js
+// src/index.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -10,7 +11,15 @@ const User = require('./models/User');
 const PasswordResetToken = require('./models/PasswordResetToken');
 const Fixture = require('./models/Fixture');
 const UserLeague = require('./models/UserLeague');
+const Room = require('./models/Room'); // ← IMPORTAR ROOM
+const Prediction = require('./models/Prediction'); // ← IMPORTAR PREDICTION
 
+// ========== ASOCIACIONES ==========
+// Prediction con Room
+Prediction.belongsTo(Room, { foreignKey: 'room_id', as: 'room' });
+Room.hasMany(Prediction, { foreignKey: 'room_id', as: 'predictions' });
+
+// (Aquí van otras asociaciones si las tienes)
 
 // Importar rutas
 const authRoutes = require('./routes/authRoutes');
@@ -20,7 +29,7 @@ const barRoutes = require('./routes/barRoutes');
 const apiRoutes = require('./routes/apiRoutes');
 
 const app = express();
-const PORT = process.env.PORT || 10000; // Render espera 10000 por defecto
+const PORT = process.env.PORT || 10000;
 
 // Middlewares
 app.use(cors());
@@ -39,28 +48,6 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Backend funcionando correctamente' });
 });
 
-// Sincronizar base de datos y levantar servidor
-const startServer = async () => {
-  try {
-    await sequelize.authenticate();
-    console.log('📦 Conectado a PostgreSQL en Render...');
-
-    // Sincronizar modelos (sin alter para evitar errores)
-    await sequelize.sync({ alter: true });
-    await User.sync();
-    await PasswordResetToken.sync();
-    await createAdmin();
-    console.log('✅ Base de datos sincronizada');
-
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-    });
-  } catch (error) {
-    console.error('❌ Error conectando a la base de datos:', error);
-    process.exit(1);
-  }
-};
-
 // Endpoint de diagnóstico (temporal)
 app.get('/diagnostic', (req, res) => {
   const dns = require('dns');
@@ -72,5 +59,27 @@ app.get('/diagnostic', (req, res) => {
     });
   });
 });
+
+// Sincronizar base de datos y levantar servidor
+const startServer = async () => {
+  try {
+    await sequelize.authenticate();
+    console.log('📦 Conectado a PostgreSQL en Render...');
+
+    // Sincronizar modelos (orden importante)
+    await sequelize.sync({ alter: true });
+    console.log('✅ Base de datos sincronizada');
+
+    await createAdmin();
+    console.log('✅ Admin verificado');
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
+    });
+  } catch (error) {
+    console.error('❌ Error conectando a la base de datos:', error);
+    process.exit(1);
+  }
+};
 
 startServer();

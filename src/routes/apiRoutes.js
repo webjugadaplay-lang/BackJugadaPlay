@@ -364,4 +364,39 @@ router.get('/player/live-room/:roomId', async (req, res) => {
   }
 });
 
+// ===== GET - Obtener TODAS las predicciones del usuario logueado =====
+router.get('/player/my-predictions', async (req, res) => {
+  try {
+    const userId = req.user.id; // Del token de autenticación
+
+    console.log("🔍 Buscando predicciones del usuario:", userId);
+
+    const predictions = await Prediction.findAll({
+      where: { 
+        user_id: userId 
+      },
+      include: [{
+        model: Room,
+        as: 'room',
+        attributes: ['id', 'name', 'team_home', 'team_away', 'match_date', 'entry_fee', 'total_pool', 'status']
+      }],
+      order: [['createdAt', 'DESC']]
+    });
+
+    console.log(`📦 Encontradas ${predictions.length} predicciones`);
+
+    return res.status(200).json({
+      success: true,
+      data: predictions
+    });
+
+  } catch (error) {
+    console.error('Error en GET /player/my-predictions:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error al obtener tus predicciones'
+    });
+  }
+});
+
 module.exports = router;

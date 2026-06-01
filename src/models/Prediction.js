@@ -53,4 +53,8 @@ const Prediction = sequelize.define('Prediction', {
   tableName: 'predictions',
 });
 
+// En tu archivo de asociaciones (generalmente associations/index.js o similar)
+Prediction.belongsTo(Room, { foreignKey: 'room_id', as: 'room' });
+Room.hasMany(Prediction, { foreignKey: 'room_id', as: 'predictions' });
+
 module.exports = Prediction;
