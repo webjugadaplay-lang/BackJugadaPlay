@@ -321,17 +321,17 @@ router.get('/player/live-room/:roomId', async (req, res) => {
       include: [{
         model: User,
         as: 'user',
-        attributes: ['id', 'player_nickname', 'name']
+        attributes: ['id', 'name', 'nickname']  // ← CAMBIADO: usa 'nickname' no 'player_nickname'
       }]
     });
 
-    // 3. Calcular ranking (simplificado)
+    // 3. Calcular ranking
     const ranking = predictions.map(pred => {
       const error = Math.abs(pred.goals_home - (room.Fixture?.goals_home || 0)) + 
                     Math.abs(pred.goals_away - (room.Fixture?.goals_away || 0));
       return {
         user_id: pred.user_id,
-        user_name: pred.user?.player_nickname || pred.user?.name || 'Jugador',
+        user_name: pred.user?.nickname || pred.user?.name || 'Jugador',  // ← CAMBIADO
         score_home: pred.goals_home,
         score_away: pred.goals_away,
         total_error: error,
