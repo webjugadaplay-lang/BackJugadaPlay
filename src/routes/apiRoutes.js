@@ -299,7 +299,14 @@ router.get('/player/live-room/:roomId', async (req, res) => {
     const { roomId } = req.params;
     const userId = req.user.id;
 
-    const room = await Room.findByPk(roomId);
+    // 1. Obtener la sala con su fixture
+    const room = await Room.findByPk(roomId, {
+      include: [{
+        model: Fixture,
+        as: 'Fixture',
+        attributes: ['home_team_name', 'away_team_name', 'match_date', 'goals_home', 'goals_away']
+      }]
+    });
 
     if (!room) {
       return res.status(404).json({
@@ -308,31 +315,51 @@ router.get('/player/live-room/:roomId', async (req, res) => {
       });
     }
 
-    let ranking = room.live_ranking || [];
-
-    if (ranking.length === 0) {
-      ranking = await calculateLiveRanking(roomId, room.current_score_home, room.current_score_away);
-    }
-
-    const userPosition = ranking.findIndex(r => r.user_id === userId);
-
-    const userPrediction = await Prediction.findOne({
-      where: {
-        user_id: userId,
-        room_id: roomId
-      },
-      order: [['createdAt', 'DESC']] // La predicción más reciente
+    // 2. Obtener todas las predicciones de esta sala
+    const predictions = await Prediction.findAll({
+      where: { room_id: roomId },
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['id', 'player_nickname', 'name']
+      }]
     });
 
+    // 3. Calcular ranking (simplificado)
+    const ranking = predictions.map(pred => {
+      const error = Math.abs(pred.goals_home - (room.Fixture?.goals_home || 0)) + 
+                    Math.abs(pred.goals_away - (room.Fixture?.goals_away || 0));
+      return {
+        user_id: pred.user_id,
+        user_name: pred.user?.player_nickname || pred.user?.name || 'Jugador',
+        score_home: pred.goals_home,
+        score_away: pred.goals_away,
+        total_error: error,
+        position: 0
+      };
+    });
+
+    // Ordenar por error (menor es mejor)
+    ranking.sort((a, b) => a.total_error - b.total_error);
+    ranking.forEach((item, idx) => { item.position = idx + 1; });
+
+    // 4. Obtener la predicción del usuario actual
+    const userPrediction = await Prediction.findOne({
+      where: { user_id: userId, room_id: roomId },
+      order: [['createdAt', 'DESC']]
+    });
+
+    // 5. Enviar respuesta
     const responseData = {
       success: true,
       data: {
         id: room.id,
-        team_home: room.team_home,
-        team_away: room.team_away,
-        match_date: room.match_date,
-        current_score_home: room.current_score_home,
-        current_score_away: room.current_score_away,
+        name: room.name,
+        team_home: room.Fixture?.home_team_name || 'Local',
+        team_away: room.Fixture?.away_team_name || 'Visitante',
+        match_date: room.Fixture?.match_date,
+        current_score_home: room.Fixture?.goals_home || 0,
+        current_score_away: room.Fixture?.goals_away || 0,
         status: room.status,
         entry_fee: room.entry_fee,
         total_pool: room.total_pool,
@@ -342,14 +369,14 @@ router.get('/player/live-room/:roomId', async (req, res) => {
           prediction: `${r.score_home} x ${r.score_away}`,
           isUser: r.user_id === userId,
           position: r.position,
-          emoji: r.emoji || '⚽',
-          status: r.status || ''
+          emoji: r.total_error === 0 ? '🥳' : r.total_error <= 2 ? '😁' : '🥲',
+          status: r.total_error === 0 ? 'Excelente' : r.total_error <= 2 ? 'Bien' : 'Regular'
         })),
         userPrediction: userPrediction ? {
           score_home: userPrediction.goals_home,
           score_away: userPrediction.goals_away
         } : null,
-        userPosition: userPosition + 1,
+        userPosition: ranking.find(r => r.user_id === userId)?.position || 0,
         totalPlayers: ranking.length
       }
     };
@@ -360,7 +387,8 @@ router.get('/player/live-room/:roomId', async (req, res) => {
     console.error('Error en GET /player/live-room/:roomId:', error);
     return res.status(500).json({
       success: false,
-      message: 'Error al cargar la sala en vivo'
+      message: 'Error al cargar la sala en vivo',
+      error: error.message
     });
   }
 });
