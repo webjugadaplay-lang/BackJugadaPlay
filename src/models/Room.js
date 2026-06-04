@@ -11,21 +11,21 @@ let isUpdating = false; // Evita actualizaciones concurrentes
 async function updateExpiredRooms() {
   try {
     const now = Date.now();
-    
+
     // Solo actualizar si pasó el tiempo mínimo
     if (now - lastUpdateTime < UPDATE_INTERVAL) {
       return 0;
     }
-    
+
     // Evitar actualizaciones concurrentes
     if (isUpdating) {
       return 0;
     }
-    
+
     isUpdating = true;
-    
+
     const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000);
-    
+
     // Actualizar todas las salas activas que cumplen la condición
     const [updatedCount] = await Room.update(
       {
@@ -43,14 +43,14 @@ async function updateExpiredRooms() {
         logging: false
       }
     );
-    
+
     if (updatedCount > 0) {
       console.log(`🔄 ${updatedCount} sala(s) actualizadas a "finished"`);
     }
-    
+
     lastUpdateTime = now;
     return updatedCount;
-    
+
   } catch (error) {
     console.error('❌ Error actualizando salas:', error);
     return 0;
@@ -104,7 +104,7 @@ const Room = sequelize.define('Room', {
     defaultValue: 0,
   },
   status: {
-    type: DataTypes.ENUM('active', 'closed', 'finished', 'cancelled'),
+    type: DataTypes.ENUM('active', 'closed', 'finished', 'cancelled', 'upcoming'),
     defaultValue: 'active',
   },
   prediction_close_time: {
@@ -135,25 +135,25 @@ const originalFindByPk = Room.findByPk.bind(Room);
 const originalFindAndCountAll = Room.findAndCountAll.bind(Room);
 
 // Sobrescribir findAll
-Room.findAll = async function(...args) {
+Room.findAll = async function (...args) {
   await updateExpiredRooms();
   return originalFindAll(...args);
 };
 
 // Sobrescribir findOne
-Room.findOne = async function(...args) {
+Room.findOne = async function (...args) {
   await updateExpiredRooms();
   return originalFindOne(...args);
 };
 
 // Sobrescribir findByPk
-Room.findByPk = async function(...args) {
+Room.findByPk = async function (...args) {
   await updateExpiredRooms();
   return originalFindByPk(...args);
 };
 
 // Sobrescribir findAndCountAll
-Room.findAndCountAll = async function(...args) {
+Room.findAndCountAll = async function (...args) {
   await updateExpiredRooms();
   return originalFindAndCountAll(...args);
 };
