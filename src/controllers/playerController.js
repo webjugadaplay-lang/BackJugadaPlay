@@ -1,64 +1,63 @@
-const db = require('../config/database');
+const sequelize = require('../config/database');
+const Room = require('../models/Room');
+const Prediction = require('../models/Prediction');
+const Fixture = require('../models/Fixture');
 
-// Obtener resultado de un partido por room_id
 const getMatchResult = async (req, res) => {
   try {
     const { roomId } = req.params;
     const userId = req.user.id;
 
-    // Verificar que el usuario tiene una predicción en esta sala
-    const [predictionCheck] = await db.execute(
-      'SELECT id FROM predictions WHERE room_id = ? AND user_id = ?',
-      [roomId, userId]
-    );
+    // Verificar que el usuario participó en esta sala
+    const prediction = await Prediction.findOne({
+      where: { room_id: roomId, user_id: userId }
+    });
 
-    if (predictionCheck.length === 0) {
+    if (!prediction) {
       return res.status(403).json({
         success: false,
         message: 'No tienes acceso a esta sala'
       });
     }
 
-    // Obtener el resultado del partido
-    const query = `
-      SELECT 
-        r.id as room_id,
-        r.score_home,
-        r.score_away,
-        COUNT(p.id) as winners_count,
-        CASE 
-          WHEN COUNT(p.id) > 0 THEN r.total_pool * 0.7 / COUNT(p.id)
-          ELSE 0
-        END as total_prize
-      FROM rooms r
-      LEFT JOIN predictions p ON p.room_id = r.id 
-        AND p.goals_home = r.score_home 
-        AND p.goals_away = r.score_away
-        AND p.is_paid = 1
-      WHERE r.id = ? AND r.status = 'finished'
-      GROUP BY r.id, r.score_home, r.score_away, r.total_pool
-    `;
+    // Obtener la sala con el fixture (para resultados)
+    const room = await Room.findByPk(roomId, {
+      include: [{
+        model: Fixture,
+        as: 'Fixture',
+        attributes: ['goals_home', 'goals_away']
+      }]
+    });
 
-    const [result] = await db.execute(query, [roomId]);
-
-    if (result.length === 0) {
+    if (!room || room.status !== 'finished') {
       return res.status(404).json({
         success: false,
         message: 'Resultado no disponible aún'
       });
     }
 
-    const matchResult = result[0];
+    // Contar ganadores
+    const winners = await Prediction.findAll({
+      where: {
+        room_id: roomId,
+        goals_home: room.Fixture.goals_home,
+        goals_away: room.Fixture.goals_away,
+        is_paid: true
+      }
+    });
+
+    const winnersCount = winners.length;
+    const totalPrize = winnersCount > 0 ? (room.total_pool * 0.7) / winnersCount : 0;
 
     res.json({
       success: true,
       data: {
-        id: matchResult.room_id,
-        room_id: matchResult.room_id,
-        score_home: matchResult.score_home,
-        score_away: matchResult.score_away,
-        winners_count: matchResult.winners_count || 0,
-        total_prize: Math.round(matchResult.total_prize || 0)
+        id: room.id,
+        room_id: room.id,
+        score_home: room.Fixture.goals_home || 0,
+        score_away: room.Fixture.goals_away || 0,
+        winners_count: winnersCount,
+        total_prize: Math.round(totalPrize)
       }
     });
 
@@ -71,6 +70,4 @@ const getMatchResult = async (req, res) => {
   }
 };
 
-module.exports = {
-  getMatchResult
-};
+module.exports = { getMatchResult };
