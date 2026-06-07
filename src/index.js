@@ -31,6 +31,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const leagueRoutes = require('./routes/league');
 const barRoutes = require('./routes/barRoutes');
 const apiRoutes = require('./routes/apiRoutes');
+const playerRoutes = require('./routes/playerRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -46,6 +47,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/league', leagueRoutes);
 app.use('/api/bar', barRoutes);
 app.use('/api', apiRoutes);
+app.use('/api/player', playerRoutes);
 
 // Ruta de prueba
 app.get('/health', (req, res) => {
