@@ -8,6 +8,6 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // Ruta para obtener resultado de un partido
-router.get('/match-result/:roomId', authenticateToken, getMatchResult);
+router.get('/match-result/:roomId', getMatchResult);
 
 module.exports = router;
