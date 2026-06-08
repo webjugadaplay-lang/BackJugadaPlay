@@ -41,6 +41,12 @@ const Prediction = sequelize.define('Prediction', {
     type: DataTypes.INTEGER,
     defaultValue: 0,
   },
+  entry_fee_paid: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    defaultValue: 0,
+    comment: 'Monto pagado por el jugador por esta predicción'
+  },
   is_paid: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
