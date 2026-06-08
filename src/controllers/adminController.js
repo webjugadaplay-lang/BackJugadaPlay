@@ -441,7 +441,7 @@ exports.getFixtures = async (req, res) => {
     const fixtures = await Fixture.findAll({
       where: whereClause,
       order: [['match_date', 'ASC']],
-      limit: 100
+      limit: 500
     });
 
     res.json({
@@ -461,18 +461,27 @@ exports.getFixtures = async (req, res) => {
 // ============ Obtener ligas para el filtro ============
 exports.getLeagues = async (req, res) => {
   try {
-    const leagues = await Fixture.findAll({
-      attributes: ['league_id', 'league_name', 'league_country'],
-      group: ['league_id', 'league_name', 'league_country'],
+    // ✅ Cambiar: Obtener ligas de UserLeague en lugar de Fixture
+    const leagues = await UserLeague.findAll({
+      where: { active: true },
+      attributes: ['league_id', 'league_name', 'league_country', 'league_logo'],
       order: [['league_country', 'ASC'], ['league_name', 'ASC']],
       raw: true
     });
 
-    console.log(`📊 ${leagues.length} ligas encontradas`);
+    console.log(`📊 ${leagues.length} ligas encontradas en UserLeague`);
+
+    // Transformar para que coincida con el formato esperado por el frontend
+    const formattedLeagues = leagues.map(league => ({
+      league_id: league.league_id,
+      league_name: league.league_name,
+      league_country: league.league_country,
+      league_logo: league.league_logo
+    }));
 
     res.json({
       success: true,
-      data: leagues
+      data: formattedLeagues
     });
   } catch (error) {
     console.error('Error al obtener ligas:', error);
