@@ -12,45 +12,98 @@ const User = require('../models/User');
 // ================= PUBLIC =================
 
 // Buscar sala por código
-router.get('/rooms/find-by-code', async (req, res) => {
+router.get('/rooms/find-by-code', authenticateToken, async (req, res) => {
   try {
     const { code } = req.query;
-    console.log("🔍 Buscando sala con código:", code);
-
-    if (!code || code.length < 3) {
-      return res.status(400).json({
-        success: false,
-        message: 'Código de sala requerido (mínimo 3 caracteres)'
+    
+    if (!code) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Código de sala requerido' 
       });
     }
-
+    
+    // Buscar la sala con su fixture relacionado
     const room = await Room.findOne({
       where: {
-        room_code: code.toUpperCase(),
+        code: code, // Nota: en tu modelo es 'code', no 'room_code'
         status: 'active'
       },
-      attributes: ['id', 'team_home', 'team_away', 'match_date', 'entry_fee', 'total_pool']
+      include: [
+        {
+          model: Fixture,
+          required: true, // INNER JOIN
+          attributes: [
+            'id', 
+            'home_team_name', 
+            'away_team_name', 
+            'match_date',
+            'status',
+            'goals_home',
+            'goals_away',
+            'venue'
+          ]
+        }
+      ],
+      attributes: [
+        'id', 
+        'code', 
+        'name', 
+        'entry_fee', 
+        'total_pool',
+        'max_participants',
+        'current_participants',
+        'status',
+        'prediction_close_time'
+      ]
     });
-
-    console.log("📦 Sala encontrada:", room ? room.id : "NO ENCONTRADA");
-
+    
     if (!room) {
-      return res.status(404).json({
-        success: false,
-        message: 'Sala no encontrada'
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Sala no encontrada o no está activa' 
       });
     }
-
+    
+    // Verificar que el fixture existe
+    if (!room.Fixture) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'El partido asociado a esta sala no existe' 
+      });
+    }
+    
+    // Retornar la información completa
     res.json({
       success: true,
-      roomId: room.id
+      roomId: room.id,
+      room: {
+        id: room.id,
+        code: room.code,
+        name: room.name,
+        entryFee: room.entry_fee,
+        totalPool: room.total_pool,
+        maxParticipants: room.max_participants,
+        currentParticipants: room.current_participants,
+        predictionCloseTime: room.prediction_close_time,
+        fixture: {
+          id: room.Fixture.id,
+          homeTeam: room.Fixture.home_team_name,
+          awayTeam: room.Fixture.away_team_name,
+          matchDate: room.Fixture.match_date,
+          status: room.Fixture.status,
+          goalsHome: room.Fixture.goals_home,
+          goalsAway: room.Fixture.goals_away,
+          venue: room.Fixture.venue
+        }
+      }
     });
-
+    
   } catch (error) {
     console.error('Error en /rooms/find-by-code:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al buscar la sala'
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error interno del servidor' 
     });
   }
 });
