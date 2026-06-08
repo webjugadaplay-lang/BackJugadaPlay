@@ -23,39 +23,15 @@ router.get('/rooms/find-by-code', authenticateToken, async (req, res) => {
       });
     }
     
-    // Buscar la sala con su fixture relacionado
+    console.log(`🔍 Buscando sala con código: ${code}`);
+    
+    // Buscar la sala activa por su código
     const room = await Room.findOne({
       where: {
-        code: code, // Nota: en tu modelo es 'code', no 'room_code'
+        code: code.toUpperCase(), // Asegurar consistencia en mayúsculas
         status: 'active'
       },
-      include: [
-        {
-          model: Fixture,
-          required: true, // INNER JOIN
-          attributes: [
-            'id', 
-            'home_team_name', 
-            'away_team_name', 
-            'match_date',
-            'status',
-            'goals_home',
-            'goals_away',
-            'venue'
-          ]
-        }
-      ],
-      attributes: [
-        'id', 
-        'code', 
-        'name', 
-        'entry_fee', 
-        'total_pool',
-        'max_participants',
-        'current_participants',
-        'status',
-        'prediction_close_time'
-      ]
+      attributes: ['id', 'code', 'name', 'status'] // Solo lo necesario
     });
     
     if (!room) {
@@ -65,38 +41,11 @@ router.get('/rooms/find-by-code', authenticateToken, async (req, res) => {
       });
     }
     
-    // Verificar que el fixture existe
-    if (!room.Fixture) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'El partido asociado a esta sala no existe' 
-      });
-    }
-    
-    // Retornar la información completa
+    // Retornar el ID de la sala para redirección
     res.json({
       success: true,
       roomId: room.id,
-      room: {
-        id: room.id,
-        code: room.code,
-        name: room.name,
-        entryFee: room.entry_fee,
-        totalPool: room.total_pool,
-        maxParticipants: room.max_participants,
-        currentParticipants: room.current_participants,
-        predictionCloseTime: room.prediction_close_time,
-        fixture: {
-          id: room.Fixture.id,
-          homeTeam: room.Fixture.home_team_name,
-          awayTeam: room.Fixture.away_team_name,
-          matchDate: room.Fixture.match_date,
-          status: room.Fixture.status,
-          goalsHome: room.Fixture.goals_home,
-          goalsAway: room.Fixture.goals_away,
-          venue: room.Fixture.venue
-        }
-      }
+      message: 'Sala encontrada exitosamente'
     });
     
   } catch (error) {
