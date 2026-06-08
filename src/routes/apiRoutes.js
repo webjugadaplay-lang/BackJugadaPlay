@@ -134,24 +134,20 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   }
 });
 
-// ===== GET - Obtener TODAS las predicciones del usuario para esta sala =====
+// ===== GET - Obtener predicciones del usuario para una sala =====
 router.get('/player/predictions/:roomId', async (req, res) => {
   try {
     const userId = req.user.id;
     const { roomId } = req.params;
-
-    console.log("🔍 Buscando TODAS las predicciones del usuario:", userId, "para sala:", roomId);
 
     const predictions = await Prediction.findAll({
       where: {
         user_id: userId,
         room_id: roomId
       },
-      attributes: ['id', 'goals_home', 'goals_away', 'is_paid', 'createdAt'],
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      attributes: ['id', 'goals_home', 'goals_away', 'entry_fee_paid', 'is_paid', 'createdAt'] // ✅ Incluir entry_fee_paid
     });
-
-    console.log(`📦 Encontradas ${predictions.length} predicciones`);
 
     return res.status(200).json({
       success: true,
@@ -159,10 +155,12 @@ router.get('/player/predictions/:roomId', async (req, res) => {
         id: p.id,
         score_home: p.goals_home,
         score_away: p.goals_away,
+        entry_fee_paid: p.entry_fee_paid,  // ✅ Devolver el campo
         paid: p.is_paid,
         created_at: p.createdAt
       }))
     });
+
   } catch (error) {
     console.error('Error en GET /player/predictions/:roomId:', error);
     return res.status(500).json({
@@ -176,9 +174,9 @@ router.get('/player/predictions/:roomId', async (req, res) => {
 router.post('/player/prediction', async (req, res) => {
   try {
     const userId = req.user.id;
-    const { room_id, score_home, score_away } = req.body;
+    const { room_id, score_home, score_away, entry_fee_paid } = req.body;
 
-    console.log("📝 Creando nueva predicción:", { userId, room_id, score_home, score_away });
+    console.log("📝 Creando nueva predicción:", { userId, room_id, score_home, score_away, entry_fee_paid });
 
     if (!room_id) {
       return res.status(400).json({
@@ -212,16 +210,30 @@ router.post('/player/prediction', async (req, res) => {
       });
     }
 
+    // Validar que entry_fee_paid esté presente y sea válido
+    let finalEntryFee = entry_fee_paid;
+    if (!finalEntryFee && finalEntryFee !== 0) {
+      // Si no viene del frontend, usar el entry_fee de la sala como fallback
+      finalEntryFee = room.entry_fee;
+      console.log("⚠️ Usando entry_fee de la sala como fallback:", finalEntryFee);
+    }
+
+    // Asegurar que sea número
+    const entryFeeValue = typeof finalEntryFee === 'string' 
+      ? parseFloat(finalEntryFee) 
+      : finalEntryFee;
+
     // ✅ SIEMPRE crear una nueva predicción (no actualizar)
     const prediction = await Prediction.create({
       user_id: userId,
       room_id,
       goals_home: score_home,
       goals_away: score_away,
+      entry_fee_paid: entryFeeValue,  // ✅ NUEVO CAMPO
       is_paid: false
     });
 
-    console.log("✅ Predicción creada con ID:", prediction.id);
+    console.log("✅ Predicción creada con ID:", prediction.id, "Entry fee:", entryFeeValue);
 
     return res.status(201).json({
       success: true,
@@ -229,6 +241,7 @@ router.post('/player/prediction', async (req, res) => {
         id: prediction.id,
         score_home: prediction.goals_home,
         score_away: prediction.goals_away,
+        entry_fee_paid: prediction.entry_fee_paid,
         paid: prediction.is_paid
       }
     });
