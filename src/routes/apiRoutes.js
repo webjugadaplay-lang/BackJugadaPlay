@@ -12,7 +12,7 @@ const User = require('../models/User');
 // ================= PUBLIC =================
 
 // Buscar sala por código
-router.get('/rooms/find-by-code', authenticateToken, async (req, res) => {
+router.get('/rooms/find-by-code', authMiddleware, async (req, res) => {
   try {
     const { code } = req.query;
     
