@@ -94,6 +94,17 @@ const Room = sequelize.define('Room', {
   total_pool: {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0,
+    comment: '70% del total recaudado - Premio para el ganador'
+  },
+  total_collected: {
+    type: DataTypes.DECIMAL(10, 2),
+    defaultValue: 0,
+    comment: '100% del total recaudado por todas las predicciones'
+  },
+  bar_commission: {
+    type: DataTypes.DECIMAL(10, 2),
+    defaultValue: 0,
+    comment: '20% del total recaudado - Comisión del bar'
   },
   max_participants: {
     type: DataTypes.INTEGER,
@@ -118,6 +129,17 @@ const Room = sequelize.define('Room', {
 }, {
   timestamps: true,
   tableName: 'rooms',
+  hooks: {
+    // Hook para actualizar campos calculados antes de guardar
+    beforeUpdate: async (room, options) => {
+      // Si total_collected cambió, recalcular total_pool y bar_commission
+      if (room.changed('total_collected')) {
+        const collected = parseFloat(room.total_collected);
+        room.total_pool = collected * 0.7;      // 70% para el pozo
+        room.bar_commission = collected * 0.2;   // 20% para el bar
+      }
+    }
+  }
 });
 
 // Establecer la asociación con Fixture

@@ -59,24 +59,75 @@ const Prediction = sequelize.define('Prediction', {
   tableName: 'predictions',
   hooks: {
     afterCreate: async (prediction, options) => {
-      // Cuando se crea una predicción, actualizar el pool de la sala
       try {
-        const Room = require('./Room'); // Ajusta la ruta según tu estructura
+        const Room = require('./Room');
+        const amountPaid = parseFloat(prediction.entry_fee_paid);
         
-        // Calcular el 70% del entry_fee_paid
-        const amountToAdd = parseFloat(prediction.entry_fee_paid) * 0.7;
+        // Obtener la sala actual
+        const room = await Room.findByPk(prediction.room_id, {
+          transaction: options.transaction
+        });
         
-        // Actualizar el total_pool de la sala
-        await Room.increment('total_pool', {
-          by: amountToAdd,
+        if (!room) {
+          throw new Error(`Sala ${prediction.room_id} no encontrada`);
+        }
+        
+        // Calcular nuevo total recaudado
+        const currentCollected = parseFloat(room.total_collected || 0);
+        const newTotalCollected = currentCollected + amountPaid;
+        
+        // Actualizar la sala: total_collected, total_pool, bar_commission
+        await Room.update({
+          total_collected: newTotalCollected,
+          total_pool: newTotalCollected * 0.7,      // 70% para el pozo
+          bar_commission: newTotalCollected * 0.2,   // 20% para el bar
+          current_participants: sequelize.literal('current_participants + 1')
+        }, {
           where: { id: prediction.room_id },
           transaction: options.transaction
         });
         
-        console.log(`✅ Actualizado pool de sala ${prediction.room_id}: +${amountToAdd} (70% de ${prediction.entry_fee_paid})`);
+        console.log(`✅ Sala ${prediction.room_id} actualizada:`);
+        console.log(`   - Recaudado: R$ ${newTotalCollected}`);
+        console.log(`   - Pozo (70%): R$ ${newTotalCollected * 0.7}`);
+        console.log(`   - Comisión bar (20%): R$ ${newTotalCollected * 0.2}`);
+        console.log(`   - Participantes: +1`);
+        
       } catch (error) {
-        console.error('❌ Error actualizando total_pool:', error);
-        throw error; // Opcional: lanzar error para que falle la creación
+        console.error('❌ Error actualizando sala:', error);
+        throw error;
+      }
+    },
+    
+    // Si se elimina una predicción, restar del total
+    afterDestroy: async (prediction, options) => {
+      try {
+        const Room = require('./Room');
+        const amountPaid = parseFloat(prediction.entry_fee_paid);
+        
+        const room = await Room.findByPk(prediction.room_id, {
+          transaction: options.transaction
+        });
+        
+        if (room) {
+          const currentCollected = parseFloat(room.total_collected || 0);
+          const newTotalCollected = Math.max(0, currentCollected - amountPaid);
+          
+          await Room.update({
+            total_collected: newTotalCollected,
+            total_pool: newTotalCollected * 0.7,
+            bar_commission: newTotalCollected * 0.2,
+            current_participants: sequelize.literal('GREATEST(current_participants - 1, 0)')
+          }, {
+            where: { id: prediction.room_id },
+            transaction: options.transaction
+          });
+          
+          console.log(`✅ Revertida actualización sala ${prediction.room_id}: -R$ ${amountPaid}`);
+        }
+      } catch (error) {
+        console.error('❌ Error revirtiendo actualización:', error);
+        throw error;
       }
     }
   }
