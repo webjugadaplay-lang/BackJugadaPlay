@@ -1,12 +1,10 @@
-// services/fixtureSyncService.js
 const axios = require('axios');
 const sequelize = require('../config/database');
 
-class FixtureSyncService {
-    constructor(io) {
-        this.io = io;
-        this.isRunning = false;
+class FixtureUpdateService {
+    constructor() {
         this.lastScores = new Map(); // Almacenar últimos marcadores conocidos
+        this.isRunning = false;
     }
 
     // Obtener fixtures en vivo desde API-Football
@@ -29,15 +27,17 @@ class FixtureSyncService {
     // Verificar si hubo cambios en los goles
     checkScoreChanges(fixtureId, newHomeScore, newAwayScore) {
         const lastScore = this.lastScores.get(fixtureId);
+        
         if (!lastScore) {
+            // Primera vez que vemos este fixture
             this.lastScores.set(fixtureId, { home: newHomeScore, away: newAwayScore });
-            return { hasChanges: true, isFirstTime: true };
+            return { hasChanges: false, isFirstTime: true };
         }
 
         const hasChanges = (lastScore.home !== newHomeScore) || (lastScore.away !== newAwayScore);
         
         if (hasChanges) {
-            console.log(`⚽ ¡GOL DETECTADO! Fixture ${fixtureId}: ${lastScore.home}-${lastScore.away} → ${newHomeScore}-${newAwayScore}`);
+            console.log(`⚽ CAMBIO DETECTADO - Fixture ${fixtureId}: ${lastScore.home}-${lastScore.away} → ${newHomeScore}-${newAwayScore}`);
             this.lastScores.set(fixtureId, { home: newHomeScore, away: newAwayScore });
         }
 
@@ -47,6 +47,27 @@ class FixtureSyncService {
     // Actualizar la base de datos local
     async updateDatabase(fixtureId, goalsHome, goalsAway) {
         try {
+            // Verificar si el fixture existe en la base de datos
+            const [fixture] = await sequelize.query(
+                `SELECT id, goals_home, goals_away FROM fixtures WHERE id = :fixtureId`,
+                {
+                    replacements: { fixtureId },
+                    type: sequelize.QueryTypes.SELECT
+                }
+            );
+
+            if (!fixture) {
+                console.log(`⚠️ Fixture ${fixtureId} no encontrado en la base de datos local`);
+                return false;
+            }
+
+            // Solo actualizar si realmente hay cambios
+            if (fixture.goals_home === goalsHome && fixture.goals_away === goalsAway) {
+                console.log(`ℹ️ Fixture ${fixtureId} ya está actualizado: ${goalsHome}-${goalsAway}`);
+                return false;
+            }
+
+            // Actualizar la base de datos
             await sequelize.query(
                 `UPDATE fixtures 
                  SET goals_home = :goalsHome, 
@@ -58,35 +79,12 @@ class FixtureSyncService {
                     type: sequelize.QueryTypes.UPDATE
                 }
             );
-            console.log(`✅ Base de datos actualizada: Fixture ${fixtureId} = ${goalsHome}-${goalsAway}`);
+            
+            console.log(`✅ BASE DE DATOS ACTUALIZADA - Fixture ${fixtureId}: ${goalsHome}-${goalsAway}`);
             return true;
         } catch (error) {
             console.error(`Error updating database for fixture ${fixtureId}:`, error);
             return false;
-        }
-    }
-
-    // Notificar a los clientes via WebSocket
-    async notifyClients(fixtureId, goalsHome, goalsAway) {
-        try {
-            // Buscar qué sala(s) están usando este fixture
-            const rooms = await sequelize.query(
-                `SELECT id FROM rooms WHERE fixture_id = :fixtureId`,
-                { replacements: { fixtureId }, type: sequelize.QueryTypes.SELECT }
-            );
-
-            for (const room of rooms) {
-                const roomName = `live-room-${room.id}`;
-                this.io.to(roomName).emit('score-updated', {
-                    fixtureId: fixtureId,
-                    goals_home: goalsHome,
-                    goals_away: goalsAway,
-                    timestamp: new Date().toISOString()
-                });
-                console.log(`📡 Notificación enviada a sala: ${roomName}`);
-            }
-        } catch (error) {
-            console.error(`Error notifying clients for fixture ${fixtureId}:`, error);
         }
     }
 
@@ -96,17 +94,19 @@ class FixtureSyncService {
         const newHomeScore = fixture.goals.home || 0;
         const newAwayScore = fixture.goals.away || 0;
 
+        // Verificar cambios
         const { hasChanges, isFirstTime } = this.checkScoreChanges(fixtureId, newHomeScore, newAwayScore);
 
+        // Solo actualizar si hay cambios reales (ignorar la primera vez)
         if (hasChanges && !isFirstTime) {
-            const updated = await this.updateDatabase(fixtureId, newHomeScore, newAwayScore);
-            if (updated) {
-                await this.notifyClients(fixtureId, newHomeScore, newAwayScore);
-            }
+            await this.updateDatabase(fixtureId, newHomeScore, newAwayScore);
+            return true; // Hubo actualización
         }
+        
+        return false; // No hubo cambios
     }
 
-    // Sincronización principal
+    // Sincronización principal - Solo actualiza la base de datos
     async sync() {
         if (this.isRunning) {
             console.log('⚠️ Sincronización ya en curso, omitiendo...');
@@ -114,7 +114,7 @@ class FixtureSyncService {
         }
 
         this.isRunning = true;
-        console.log('🔄 Iniciando sincronización con API-Football...');
+        console.log('🔄 Verificando cambios en API-Football...');
 
         try {
             const liveFixtures = await this.fetchLiveFixtures();
@@ -125,13 +125,19 @@ class FixtureSyncService {
                 return;
             }
 
-            console.log(`📊 Procesando ${liveFixtures.length} partidos en vivo`);
+            console.log(`📊 Revisando ${liveFixtures.length} partidos en vivo`);
+            let updatedCount = 0;
 
             for (const fixture of liveFixtures) {
-                await this.processFixture(fixture);
+                const wasUpdated = await this.processFixture(fixture);
+                if (wasUpdated) updatedCount++;
             }
 
-            console.log('✅ Sincronización completada');
+            if (updatedCount > 0) {
+                console.log(`✅ Sincronización completada - ${updatedCount} fixtures actualizados`);
+            } else {
+                console.log(`✅ Sincronización completada - Sin cambios detectados`);
+            }
         } catch (error) {
             console.error('Error en sincronización:', error);
         } finally {
@@ -141,14 +147,23 @@ class FixtureSyncService {
 
     // Iniciar el servicio programado
     start(intervalSeconds = 10) {
-        console.log(`🚀 Iniciando servicio de sincronización automática cada ${intervalSeconds} segundos`);
+        console.log(`🚀 Iniciando servicio de actualización de fixtures cada ${intervalSeconds} segundos`);
+        console.log(`📝 Solo actualizará la base de datos - SIN notificaciones WebSocket`);
         
+        // Ejecutar inmediatamente
         this.sync();
         
+        // Programar ejecuciones periódicas
         setInterval(() => {
             this.sync();
         }, intervalSeconds * 1000);
     }
+
+    // Detener el servicio
+    stop() {
+        console.log('🛑 Deteniendo servicio de actualización de fixtures');
+        this.isRunning = true; // Previene nuevas ejecuciones
+    }
 }
 
-module.exports = FixtureSyncService;
+module.exports = FixtureUpdateService;

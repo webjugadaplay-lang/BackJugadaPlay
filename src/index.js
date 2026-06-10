@@ -1,8 +1,8 @@
 // src/index.js
 require('dotenv').config();
 const express = require('express');
-const http = require('http'); // 👈 NUEVO
-const socketIO = require('socket.io'); // 👈 NUEVO
+const http = require('http');
+const socketIO = require('socket.io');
 const cors = require('cors');
 const sequelize = require('./config/database');
 const createAdmin = require('./scripts/createAdmin');
@@ -15,8 +15,8 @@ const UserLeague = require('./models/UserLeague');
 const Room = require('./models/Room');
 const Prediction = require('./models/Prediction');
 
-// Importar servicio de sincronización 👈 NUEVO
-const FixtureSyncService = require('./services/fixtureSyncService');
+// Importar servicio de actualización de fixtures (SIN WebSocket)
+const FixtureUpdateService = require('./services/fixtureUpdateService');
 
 // ========== ASOCIACIONES (TODAS AQUÍ) ==========
 Prediction.belongsTo(Room, { foreignKey: 'room_id', as: 'room' });
@@ -39,13 +39,13 @@ const playerRoutes = require('./routes/playerRoutes');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// 👈 NUEVO: Crear servidor HTTP manualmente
+// Crear servidor HTTP manualmente
 const server = http.createServer(app);
 
-// 👈 NUEVO: Configurar Socket.IO
+// Configurar Socket.IO
 const io = socketIO(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "*", // En producción, pon tu URL del frontend
+    origin: process.env.FRONTEND_URL || "*",
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -56,7 +56,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// 👈 NUEVO: Middleware para hacer io accesible en las rutas
+// Middleware para hacer io accesible en las rutas
 app.use((req, res, next) => {
   req.io = io;
   next();
@@ -87,7 +87,7 @@ app.get('/diagnostic', (req, res) => {
   });
 });
 
-// 👈 NUEVO: Configurar eventos de Socket.IO
+// Configurar eventos de Socket.IO
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
@@ -126,8 +126,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// 👈 NUEVO: Crear instancia del servicio de sincronización
-const fixtureSyncService = new FixtureSyncService(io);
+// Inicializar servicio de actualización de fixtures
+const fixtureUpdateService = new FixtureUpdateService();
 
 // Sincronizar base de datos y levantar servidor
 const startServer = async () => {
@@ -141,14 +141,13 @@ const startServer = async () => {
     await createAdmin();
     console.log('✅ Admin verificado');
 
-    // 👈 CAMBIO IMPORTANTE: Usar server.listen en lugar de app.listen
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
       console.log(`🔌 WebSocket Socket.IO habilitado`);
       
-      // 👈 NUEVO: Iniciar la sincronización automática con API-Football
-      const syncInterval = process.env.SYNC_INTERVAL || 10; // segundos
-      fixtureSyncService.start(syncInterval);
+      // Iniciar servicio de actualización automática (cada 10 segundos)
+      const syncInterval = process.env.SYNC_INTERVAL || 10;
+      fixtureUpdateService.start(syncInterval);
     });
   } catch (error) {
     console.error('❌ Error:', error);
