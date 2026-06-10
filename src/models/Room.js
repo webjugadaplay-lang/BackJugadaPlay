@@ -106,6 +106,11 @@ const Room = sequelize.define('Room', {
     defaultValue: 0,
     comment: '20% del total recaudado - Comisión del bar'
   },
+  platform_commission: {
+    type: DataTypes.DECIMAL(10, 2),
+    defaultValue: 0,
+    comment: '10% del total recaudado - Comisión de la plataforma JugadaPlay'
+  },
   max_participants: {
     type: DataTypes.INTEGER,
     defaultValue: 50,
@@ -132,11 +137,12 @@ const Room = sequelize.define('Room', {
   hooks: {
     // Hook para actualizar campos calculados antes de guardar
     beforeUpdate: async (room, options) => {
-      // Si total_collected cambió, recalcular total_pool y bar_commission
+      // Si total_collected cambió, recalcular todos los campos derivados
       if (room.changed('total_collected')) {
         const collected = parseFloat(room.total_collected);
-        room.total_pool = collected * 0.7;      // 70% para el pozo
-        room.bar_commission = collected * 0.2;   // 20% para el bar
+        room.total_pool = collected * 0.7;           // 70% para el pozo del ganador
+        room.bar_commission = collected * 0.2;       // 20% para el bar
+        room.platform_commission = collected * 0.1;  // 10% para la plataforma
       }
     }
   }

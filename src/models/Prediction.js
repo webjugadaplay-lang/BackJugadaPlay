@@ -76,11 +76,12 @@ const Prediction = sequelize.define('Prediction', {
         const currentCollected = parseFloat(room.total_collected || 0);
         const newTotalCollected = currentCollected + amountPaid;
         
-        // Actualizar la sala: total_collected, total_pool, bar_commission
+        // Actualizar la sala con todos los campos calculados
         await Room.update({
           total_collected: newTotalCollected,
-          total_pool: newTotalCollected * 0.7,      // 70% para el pozo
-          bar_commission: newTotalCollected * 0.2,   // 20% para el bar
+          total_pool: newTotalCollected * 0.7,        // 70% para el pozo
+          bar_commission: newTotalCollected * 0.2,    // 20% para el bar
+          platform_commission: newTotalCollected * 0.1, // 10% para la plataforma
           current_participants: sequelize.literal('current_participants + 1')
         }, {
           where: { id: prediction.room_id },
@@ -88,9 +89,10 @@ const Prediction = sequelize.define('Prediction', {
         });
         
         console.log(`✅ Sala ${prediction.room_id} actualizada:`);
-        console.log(`   - Recaudado: R$ ${newTotalCollected}`);
-        console.log(`   - Pozo (70%): R$ ${newTotalCollected * 0.7}`);
-        console.log(`   - Comisión bar (20%): R$ ${newTotalCollected * 0.2}`);
+        console.log(`   - Recaudado total: R$ ${newTotalCollected.toFixed(2)}`);
+        console.log(`   - Pozo ganador (70%): R$ ${(newTotalCollected * 0.7).toFixed(2)}`);
+        console.log(`   - Comisión bar (20%): R$ ${(newTotalCollected * 0.2).toFixed(2)}`);
+        console.log(`   - Comisión plataforma (10%): R$ ${(newTotalCollected * 0.1).toFixed(2)}`);
         console.log(`   - Participantes: +1`);
         
       } catch (error) {
@@ -117,13 +119,14 @@ const Prediction = sequelize.define('Prediction', {
             total_collected: newTotalCollected,
             total_pool: newTotalCollected * 0.7,
             bar_commission: newTotalCollected * 0.2,
+            platform_commission: newTotalCollected * 0.1,
             current_participants: sequelize.literal('GREATEST(current_participants - 1, 0)')
           }, {
             where: { id: prediction.room_id },
             transaction: options.transaction
           });
           
-          console.log(`✅ Revertida actualización sala ${prediction.room_id}: -R$ ${amountPaid}`);
+          console.log(`✅ Revertida actualización sala ${prediction.room_id}: -R$ ${amountPaid.toFixed(2)}`);
         }
       } catch (error) {
         console.error('❌ Error revirtiendo actualización:', error);
