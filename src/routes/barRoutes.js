@@ -32,36 +32,36 @@ router.post('/rooms', authMiddleware, async (req, res) => {
 
     // Validaciones
     if (!barId || !fixture_id) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'barId y fixture_id son requeridos' 
+      return res.status(400).json({
+        success: false,
+        message: 'barId y fixture_id son requeridos'
       });
     }
 
     // Obtener el fixture
     const fixture = await Fixture.findByPk(fixture_id);
     if (!fixture) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Partido no encontrado' 
+      return res.status(404).json({
+        success: false,
+        message: 'Partido no encontrado'
       });
     }
 
     // Verificar que el partido no haya empezado
     const matchDate = new Date(fixture.match_date);
     if (matchDate < new Date()) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'No se puede crear una sala para un partido que ya comenzó' 
+      return res.status(400).json({
+        success: false,
+        message: 'No se puede crear una sala para un partido que ya comenzó'
       });
     }
 
     // Verificar que el bar existe
     const bar = await Bar.findByPk(barId);
     if (!bar) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Bar no encontrado' 
+      return res.status(404).json({
+        success: false,
+        message: 'Bar no encontrado'
       });
     }
 
@@ -112,9 +112,9 @@ router.post('/rooms', authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error('Error creating room:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error al crear la sala: ' + error.message 
+    res.status(500).json({
+      success: false,
+      message: 'Error al crear la sala: ' + error.message
     });
   }
 });
@@ -123,16 +123,16 @@ router.post('/rooms', authMiddleware, async (req, res) => {
 router.get('/rooms', authMiddleware, async (req, res) => {
   try {
     const { barId, status = 'active' } = req.query;
-    
+
     if (!barId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'barId es requerido' 
+      return res.status(400).json({
+        success: false,
+        message: 'barId es requerido'
       });
     }
 
     const rooms = await Room.findAll({
-      where: { 
+      where: {
         bar_id: barId,
         status: status
       },
@@ -161,9 +161,9 @@ router.get('/rooms', authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching rooms:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error al cargar las salas: ' + error.message 
+    res.status(500).json({
+      success: false,
+      message: 'Error al cargar las salas: ' + error.message
     });
   }
 });
@@ -172,11 +172,11 @@ router.get('/rooms', authMiddleware, async (req, res) => {
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
     const { barId } = req.query;
-    
+
     if (!barId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'barId es requerido' 
+      return res.status(400).json({
+        success: false,
+        message: 'barId es requerido'
       });
     }
 
@@ -197,7 +197,7 @@ router.get('/stats', authMiddleware, async (req, res) => {
         attributes: ['id']
       });
       const roomIds = rooms.map(r => r.id);
-      
+
       if (roomIds.length > 0) {
         const participants = await RoomParticipant.findAll({
           where: { room_id: roomIds },
@@ -215,7 +215,7 @@ router.get('/stats', authMiddleware, async (req, res) => {
       where: { bar_id: barId },
       attributes: ['total_pool']
     });
-    
+
     const totalRevenue = rooms.reduce((sum, room) => sum + parseFloat(room.total_pool || 0), 0);
 
     // Ranking simple
@@ -246,9 +246,9 @@ router.get('/stats', authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching stats:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error al cargar las estadísticas: ' + error.message 
+    res.status(500).json({
+      success: false,
+      message: 'Error al cargar las estadísticas: ' + error.message
     });
   }
 });
@@ -257,18 +257,18 @@ router.get('/stats', authMiddleware, async (req, res) => {
 router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   try {
     const { roomId } = req.params;
-    
+
     const room = await Room.findByPk(roomId);
-    
+
     if (!room) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Sala no encontrada' 
+      return res.status(404).json({
+        success: false,
+        message: 'Sala no encontrada'
       });
     }
 
     const fixture = room.fixture_id ? await Fixture.findByPk(room.fixture_id) : null;
-    
+
     const participants = await RoomParticipant.findAll({
       where: { room_id: roomId },
       order: [['total_points', 'DESC']]
@@ -296,6 +296,9 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
           name: room.name,
           entry_fee: room.entry_fee,
           total_pool: room.total_pool,
+          total_collected: room.total_collected,      // ← NUEVA COLUMNA
+          bar_commission: room.bar_commission,        // ← NUEVA COLUMNA
+          platform_commission: room.platform_commission, // ← NUEVA COLUMNA
           status: room.status,
           prediction_close_time: room.prediction_close_time,
           current_participants: room.current_participants,
@@ -315,9 +318,9 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching room details:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error al cargar los detalles de la sala' 
+    res.status(500).json({
+      success: false,
+      message: 'Error al cargar los detalles de la sala'
     });
   }
 });
