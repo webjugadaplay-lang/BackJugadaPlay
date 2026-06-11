@@ -325,4 +325,6 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
   }
 });
 
+//get
+
 module.exports = router;
