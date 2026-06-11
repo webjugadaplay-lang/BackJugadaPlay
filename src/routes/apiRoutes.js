@@ -60,6 +60,80 @@ router.get('/rooms/find-by-code', authMiddleware, async (req, res) => {
 // ================= PRIVATE =================
 router.use(authMiddleware);
 
+// ===== ROOM BY ID =====
+router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+
+    console.log("🔍 [FIX] Buscando sala:", roomId);
+
+    const room = await Room.findByPk(roomId);
+
+    console.log("📦 [FIX] Sala encontrada en rooms:", room ? "SI" : "NO");
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sala no encontrada'
+      });
+    }
+
+    const responseData = {
+      id: room.id,
+      name: room.name || 'Partido',
+      team_home: 'Local',
+      team_away: 'Visitante',
+      match_date: room.prediction_close_time || new Date(),
+      prediction_close_time: room.prediction_close_time,
+      entry_fee: room.entry_fee || 0,
+      total_pool: room.total_pool || 0,
+      status: room.status,
+      room_code: room.code,
+      bar: {
+        name: 'Bar'
+      }
+    };
+
+    if (room.fixture_id) {
+      try {
+        const fixtureQuery = `
+          SELECT home_team_name, away_team_name, match_date 
+          FROM fixtures 
+          WHERE id = :fixtureId
+        `;
+
+        const [fixture] = await sequelize.query(fixtureQuery, {
+          replacements: { fixtureId: room.fixture_id },
+          type: sequelize.QueryTypes.SELECT
+        });
+
+        if (fixture) {
+          responseData.team_home = fixture.home_team_name || 'Local';
+          responseData.team_away = fixture.away_team_name || 'Visitante';
+          responseData.match_date = fixture.match_date || responseData.match_date;
+        }
+      } catch (fixtureError) {
+        console.log("No se pudo obtener fixture:", fixtureError.message);
+      }
+    }
+
+    console.log("✅ [FIX] Datos enviados:", responseData);
+
+    res.json({
+      success: true,
+      data: responseData
+    });
+
+  } catch (error) {
+    console.error('Error en GET /rooms/:roomId:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener la sala',
+      error: error.message
+    });
+  }
+});
+
 // ===== GET - Obtener predicciones del usuario para una sala =====
 router.get('/player/predictions/:roomId', async (req, res) => {
   try {
