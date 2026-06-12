@@ -312,16 +312,8 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
 router.get('/player/live-room/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
-    const userId = req.user.id;
 
-    // 1. Obtener la sala con su fixture
-    const room = await Room.findByPk(roomId, {
-      include: [{
-        model: Fixture,
-        as: 'Fixture',
-        attributes: ['home_team_name', 'away_team_name', 'match_date', 'goals_home', 'goals_away']
-      }]
-    });
+    const room = await Room.findByPk(roomId);
 
     if (!room) {
       return res.status(404).json({
@@ -330,80 +322,60 @@ router.get('/player/live-room/:roomId', async (req, res) => {
       });
     }
 
-    // 2. Obtener todas las predicciones de esta sala
-    const predictions = await Prediction.findAll({
+    const fixture = room.fixture_id ? await Fixture.findByPk(room.fixture_id) : null;
+
+    const participants = await RoomParticipant.findAll({
       where: { room_id: roomId },
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['id', 'name', 'nickname']  // ← CAMBIADO: usa 'nickname' no 'player_nickname'
-      }]
+      order: [['total_points', 'DESC']]
     });
 
-    // 3. Calcular ranking
-    const ranking = predictions.map(pred => {
-      const error = Math.abs(pred.goals_home - (room.Fixture?.goals_home || 0)) + 
-                    Math.abs(pred.goals_away - (room.Fixture?.goals_away || 0));
+    // Obtener nombres de usuarios
+    const participantsWithUsers = await Promise.all(participants.map(async (p) => {
+      const user = await User.findByPk(p.user_id);
       return {
-        user_id: pred.user_id,
-        user_name: pred.user?.nickname || pred.user?.name || 'Jugador',  // ← CAMBIADO
-        score_home: pred.goals_home,
-        score_away: pred.goals_away,
-        total_error: error,
-        position: 0
+        id: p.id,
+        user_id: p.user_id,
+        user_name: user ? user.name : 'Usuario',
+        total_points: p.total_points,
+        rank: p.rank,
+        joined_at: p.joined_at
       };
-    });
+    }));
 
-    // Ordenar por error (menor es mejor)
-    ranking.sort((a, b) => a.total_error - b.total_error);
-    ranking.forEach((item, idx) => { item.position = idx + 1; });
-
-    // 4. Obtener la predicción del usuario actual
-    const userPrediction = await Prediction.findOne({
-      where: { user_id: userId, room_id: roomId },
-      order: [['createdAt', 'DESC']]
-    });
-
-    // 5. Enviar respuesta
-    const responseData = {
+    res.json({
       success: true,
       data: {
-        id: room.id,
-        name: room.name,
-        team_home: room.Fixture?.home_team_name || 'Local',
-        team_away: room.Fixture?.away_team_name || 'Visitante',
-        match_date: room.Fixture?.match_date,
-        current_score_home: room.Fixture?.goals_home || 0,
-        current_score_away: room.Fixture?.goals_away || 0,
-        status: room.status,
-        entry_fee: room.entry_fee,
-        total_pool: room.total_pool,
-        ranking: ranking.map(r => ({
-          userId: r.user_id,
-          name: r.user_name,
-          prediction: `${r.score_home} x ${r.score_away}`,
-          isUser: r.user_id === userId,
-          position: r.position,
-          emoji: r.total_error === 0 ? '🥳' : r.total_error <= 2 ? '😁' : '🥲',
-          status: r.total_error === 0 ? 'Excelente' : r.total_error <= 2 ? 'Bien' : 'Regular'
-        })),
-        userPrediction: userPrediction ? {
-          score_home: userPrediction.goals_home,
-          score_away: userPrediction.goals_away
+        room: {
+          id: room.id,
+          code: room.code,
+          name: room.name,
+          entry_fee: room.entry_fee,
+          total_pool: room.total_pool,
+          total_collected: room.total_collected,      // ← NUEVA COLUMNA
+          bar_commission: room.bar_commission,        // ← NUEVA COLUMNA
+          platform_commission: room.platform_commission, // ← NUEVA COLUMNA
+          status: room.status,
+          prediction_close_time: room.prediction_close_time,
+          current_participants: room.current_participants,
+          max_participants: room.max_participants
+        },
+        fixture: fixture ? {
+          id: fixture.id,
+          home_team: fixture.home_team_name,
+          away_team: fixture.away_team_name,
+          match_date: fixture.match_date,
+          venue: fixture.venue,
+          status: fixture.status
         } : null,
-        userPosition: ranking.find(r => r.user_id === userId)?.position || 0,
-        totalPlayers: ranking.length
+        participants: participantsWithUsers
       }
-    };
-
-    return res.json(responseData);
+    });
 
   } catch (error) {
-    console.error('Error en GET /player/live-room/:roomId:', error);
-    return res.status(500).json({
+    console.error('Error fetching room details:', error);
+    res.status(500).json({
       success: false,
-      message: 'Error al cargar la sala en vivo',
-      error: error.message
+      message: 'Error al cargar los detalles de la sala'
     });
   }
 });
