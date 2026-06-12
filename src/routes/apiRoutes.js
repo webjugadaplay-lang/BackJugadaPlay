@@ -15,16 +15,16 @@ const User = require('../models/User');
 router.get('/rooms/find-by-code', authMiddleware, async (req, res) => {
   try {
     const { code } = req.query;
-    
+
     if (!code) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Código de sala requerido' 
+      return res.status(400).json({
+        success: false,
+        message: 'Código de sala requerido'
       });
     }
-    
+
     console.log(`🔍 Buscando sala con código: ${code}`);
-    
+
     // Buscar la sala activa por su código
     const room = await Room.findOne({
       where: {
@@ -33,26 +33,26 @@ router.get('/rooms/find-by-code', authMiddleware, async (req, res) => {
       },
       attributes: ['id', 'code', 'name', 'status'] // Solo lo necesario
     });
-    
+
     if (!room) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Sala no encontrada o no está activa' 
+      return res.status(404).json({
+        success: false,
+        message: 'Sala no encontrada o no está activa'
       });
     }
-    
+
     // Retornar el ID de la sala para redirección
     res.json({
       success: true,
       roomId: room.id,
       message: 'Sala encontrada exitosamente'
     });
-    
+
   } catch (error) {
     console.error('Error en /rooms/find-by-code:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error interno del servidor' 
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
     });
   }
 });
@@ -77,6 +77,31 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
         message: 'Sala no encontrada'
       });
     }
+
+    // 🔥 NUEVO: Obtener participantes de la sala
+    const participants = await Prediction.findAll({
+      where: { room_id: roomId },
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['id', 'name', 'player_nickname', 'email']
+      }],
+      attributes: ['id', 'goals_home', 'goals_away', 'entry_fee_paid', 'is_paid', 'createdAt']
+    });
+
+    // Formatear los datos de participantes
+    const formattedParticipants = participants.map(pred => ({
+      id: pred.id,
+      user_id: pred.user_id,
+      user_name: pred.user?.player_nickname || pred.user?.name || 'Jugador',
+      prediction: {
+        home: pred.goals_home,
+        away: pred.goals_away
+      },
+      entry_fee_paid: pred.entry_fee_paid,
+      is_paid: pred.is_paid,
+      created_at: pred.createdAt
+    }));
 
     const responseData = {
       id: room.id,
@@ -118,6 +143,7 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
     }
 
     console.log("✅ [FIX] Datos enviados:", responseData);
+    console.log(`👥 [FIX] Participantes encontrados: ${formattedParticipants.length}`);
 
     res.json({
       success: true,
@@ -219,8 +245,8 @@ router.post('/player/prediction', async (req, res) => {
     }
 
     // Asegurar que sea número
-    const entryFeeValue = typeof finalEntryFee === 'string' 
-      ? parseFloat(finalEntryFee) 
+    const entryFeeValue = typeof finalEntryFee === 'string'
+      ? parseFloat(finalEntryFee)
       : finalEntryFee;
 
     // ✅ SIEMPRE crear una nueva predicción (no actualizar)
