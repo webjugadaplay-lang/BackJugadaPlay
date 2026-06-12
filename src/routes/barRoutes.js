@@ -271,35 +271,23 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
     
     const fixture = room.fixture_id ? await Fixture.findByPk(room.fixture_id) : null;
 
-    // ✅ CAMBIO IMPORTANTE: Usar Prediction en lugar de RoomParticipant
-    const predictions = await Prediction.findAll({
+    const participants = await RoomParticipant.findAll({
       where: { room_id: roomId },
-      include: [{
-        model: User,
-        as: 'user',  // Asegúrate que la relación en el modelo Prediction se llama 'user'
-        attributes: ['id', 'name', 'player_nickname']
-      }],
-      order: [['createdAt', 'DESC']]
+      order: [['total_points', 'DESC']]
     });
 
-    // Formatear los participantes con sus predicciones
-    const participantsWithPredictions = predictions.map(pred => {
-      // Obtener el nombre del usuario (priorizar player_nickname)
-      const userName = pred.user?.player_nickname || pred.user?.name || 'Jugador';
-      
+    // Obtener nombres de usuarios
+    const participantsWithUsers = await Promise.all(participants.map(async (p) => {
+      const user = await User.findByPk(p.user_id);
       return {
-        id: pred.id,
-        user_id: pred.user_id,
-        user_name: userName,
-        prediction_home: pred.goals_home,
-        prediction_away: pred.goals_away,
-        entry_fee_paid: pred.entry_fee_paid,
-        is_paid: pred.is_paid,
-        created_at: pred.createdAt
+        id: p.id,
+        user_id: p.user_id,
+        user_name: user ? user.name : 'Usuario',
+        total_points: p.total_points,
+        rank: p.rank,
+        joined_at: p.joined_at
       };
-    });
-
-    console.log(`📊 Participantes encontrados en predictions: ${participantsWithPredictions.length}`);
+    }));
 
     res.json({
       success: true,
@@ -310,9 +298,9 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
           name: room.name,
           entry_fee: room.entry_fee,
           total_pool: room.total_pool,
-          total_collected: room.total_collected,
-          bar_commission: room.bar_commission,
-          platform_commission: room.platform_commission,
+          total_collected: room.total_collected,      // ← NUEVA COLUMNA
+          bar_commission: room.bar_commission,        // ← NUEVA COLUMNA
+          platform_commission: room.platform_commission, // ← NUEVA COLUMNA
           status: room.status,
           prediction_close_time: room.prediction_close_time,
           current_participants: room.current_participants,
@@ -326,7 +314,7 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
           venue: fixture.venue,
           status: fixture.status
         } : null,
-        participants: participantsWithPredictions  // ✅ Ahora con datos reales
+        participants: participantsWithUsers
       }
     });
 
@@ -338,5 +326,7 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
     });
   }
 });
+
+//get
 
 module.exports = router;
