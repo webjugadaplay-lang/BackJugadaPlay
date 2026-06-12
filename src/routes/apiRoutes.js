@@ -242,7 +242,6 @@ router.get('/player/live-room/:roomId', async (req, res) => {
     const { roomId } = req.params;
 
     const room = await Room.findByPk(roomId);
-
     if (!room) {
       return res.status(404).json({
         success: false,
@@ -251,51 +250,105 @@ router.get('/player/live-room/:roomId', async (req, res) => {
     }
 
     const fixture = room.fixture_id ? await Fixture.findByPk(room.fixture_id) : null;
+    if (!fixture) {
+      return res.status(404).json({
+        success: false,
+        message: 'Partido no encontrado para esta sala'
+      });
+    }
 
     const participants = await RoomParticipant.findAll({
       where: { room_id: roomId },
       order: [['total_points', 'DESC']]
     });
 
-    // Obtener nombres de usuarios
-    const participantsWithUsers = await Promise.all(participants.map(async (p) => {
+    // Obtener predicciones de los participantes
+    const participantsWithPredictions = await Promise.all(participants.map(async (p, index) => {
       const user = await User.findByPk(p.user_id);
+      
+      // Obtener la predicción del usuario para este partido
+      const prediction = await Prediction.findOne({
+        where: {
+          user_id: p.user_id,
+          fixture_id: fixture.id,
+          room_id: roomId
+        }
+      });
+
+      // Calcular estado basado en puntos (ejemplo)
+      let status = 'Regular';
+      if (p.total_points >= 80) status = 'Excelente';
+      else if (p.total_points >= 60) status = 'Bien';
+      else if (p.total_points >= 40) status = 'Regular';
+      else status = 'Mal';
+
       return {
-        id: p.id,
-        user_id: p.user_id,
-        user_name: user ? user.name : 'Usuario',
-        total_points: p.total_points,
-        rank: p.rank,
-        joined_at: p.joined_at
+        userId: p.user_id,
+        name: user ? user.name : 'Usuario',
+        prediction: prediction ? `${prediction.home_score} x ${prediction.away_score}` : '-- x --',
+        position: index + 1,
+        isUser: false, // Se marcará después con el usuario autenticado
+        emoji: getRandomEmoji(), // Función para asignar emoji
+        status: status,
+        points: p.total_points
       };
     }));
 
+    // Obtener el usuario autenticado
+    const token = req.headers.authorization?.split(' ')[1];
+    let currentUserId = null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        currentUserId = decoded.id;
+      } catch (error) {
+        console.error('Error verifying token:', error);
+      }
+    }
+
+    // Marcar al usuario actual en el ranking
+    const rankingWithUserFlag = participantsWithPredictions.map(p => ({
+      ...p,
+      isUser: p.userId === currentUserId
+    }));
+
+    // Obtener la predicción del usuario actual
+    let userPrediction = null;
+    if (currentUserId) {
+      const userPred = await Prediction.findOne({
+        where: {
+          user_id: currentUserId,
+          fixture_id: fixture.id,
+          room_id: roomId
+        }
+      });
+      if (userPred) {
+        userPrediction = {
+          score_home: userPred.home_score,
+          score_away: userPred.away_score
+        };
+      }
+    }
+
+    // 🔥 IMPORTANTE: Estructurar la respuesta como espera el frontend
     res.json({
       success: true,
       data: {
-        room: {
-          id: room.id,
-          code: room.code,
-          name: room.name,
-          entry_fee: room.entry_fee,
-          total_pool: room.total_pool,
-          total_collected: room.total_collected,      // ← NUEVA COLUMNA
-          bar_commission: room.bar_commission,        // ← NUEVA COLUMNA
-          platform_commission: room.platform_commission, // ← NUEVA COLUMNA
-          status: room.status,
-          prediction_close_time: room.prediction_close_time,
-          current_participants: room.current_participants,
-          max_participants: room.max_participants
-        },
-        fixture: fixture ? {
-          id: fixture.id,
-          home_team: fixture.home_team_name,
-          away_team: fixture.away_team_name,
-          match_date: fixture.match_date,
-          venue: fixture.venue,
-          status: fixture.status
+        id: room.id,
+        team_home: fixture.home_team_name,
+        team_away: fixture.away_team_name,
+        match_date: fixture.match_date,
+        status: fixture.status || 'En vivo',
+        total_pool: room.total_pool || 0,
+        current_score_home: fixture.home_score || 0,    // ← Necesitas añadir estos campos a Fixture
+        current_score_away: fixture.away_score || 0,    // ← Necesitas añadir estos campos a Fixture
+        entry_fee: room.entry_fee || 0,
+        bar: room.bar_id ? {
+          id: room.bar_id,
+          name: room.bar_name
         } : null,
-        participants: participantsWithUsers
+        userPrediction: userPrediction,
+        ranking: rankingWithUserFlag
       }
     });
 
@@ -303,7 +356,8 @@ router.get('/player/live-room/:roomId', async (req, res) => {
     console.error('Error fetching room details:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al cargar los detalles de la sala'
+      message: 'Error al cargar los detalles de la sala',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
