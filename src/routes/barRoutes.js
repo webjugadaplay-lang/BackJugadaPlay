@@ -277,7 +277,7 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
 
     // Obtener nombres de usuarios y sus predicciones
     const participantsWithUsers = await Promise.all(participants.map(async (p) => {
-      const user = await User.findByK(p.user_id);
+      const user = await User.findByPk(p.user_id);
       console.log("los participantes son:", user);
       return {
         id: p.id,
