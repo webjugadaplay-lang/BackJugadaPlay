@@ -60,107 +60,7 @@ router.get('/rooms/find-by-code', authMiddleware, async (req, res) => {
 // ================= PRIVATE =================
 router.use(authMiddleware);
 
-// ===== ROOM BY ID =====
-router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
-  try {
-    const { roomId } = req.params;
 
-    console.log("🔍 [FIX] Buscando sala:", roomId);
-
-    const room = await Room.findByPk(roomId);
-
-    console.log("📦 [FIX] Sala encontrada en rooms:", room ? "SI" : "NO");
-
-    if (!room) {
-      return res.status(404).json({
-        success: false,
-        message: 'Sala no encontrada'
-      });
-    }
-
-    console.log("yo soy de apiRoutes");
-
-    // 🔥 NUEVO: Obtener participantes de la sala
-    const participants = await Prediction.findAll({
-      where: { room_id: roomId },
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['id', 'name', 'player_nickname', 'email']
-      }],
-      attributes: ['id', 'goals_home', 'goals_away', 'entry_fee_paid', 'is_paid', 'createdAt']
-    });
-
-    // Formatear los datos de participantes
-    const formattedParticipants = participants.map(pred => ({
-      id: pred.id,
-      user_id: pred.user_id,
-      user_name: pred.user?.player_nickname || pred.user?.name || 'Jugador',
-      prediction: {
-        home: pred.goals_home,
-        away: pred.goals_away
-      },
-      entry_fee_paid: pred.entry_fee_paid,
-      is_paid: pred.is_paid,
-      created_at: pred.createdAt
-    }));
-
-    const responseData = {
-      id: room.id,
-      name: room.name || 'Partido',
-      team_home: 'Local',
-      team_away: 'Visitante',
-      match_date: room.prediction_close_time || new Date(),
-      prediction_close_time: room.prediction_close_time,
-      entry_fee: room.entry_fee || 0,
-      total_pool: room.total_pool || 0,
-      status: room.status,
-      room_code: room.code,
-      bar: {
-        name: 'Bar'
-      }
-    };
-
-    if (room.fixture_id) {
-      try {
-        const fixtureQuery = `
-          SELECT home_team_name, away_team_name, match_date 
-          FROM fixtures 
-          WHERE id = :fixtureId
-        `;
-
-        const [fixture] = await sequelize.query(fixtureQuery, {
-          replacements: { fixtureId: room.fixture_id },
-          type: sequelize.QueryTypes.SELECT
-        });
-
-        if (fixture) {
-          responseData.team_home = fixture.home_team_name || 'Local';
-          responseData.team_away = fixture.away_team_name || 'Visitante';
-          responseData.match_date = fixture.match_date || responseData.match_date;
-        }
-      } catch (fixtureError) {
-        console.log("No se pudo obtener fixture:", fixtureError.message);
-      }
-    }
-
-    console.log("✅ [FIX] Datos enviados:", responseData);
-    console.log(`👥 [FIX] Participantes encontrados: ${formattedParticipants.length}`);
-
-    res.json({
-      success: true,
-      data: responseData
-    });
-
-  } catch (error) {
-    console.error('Error en GET /rooms/:roomId:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener la sala',
-      error: error.message
-    });
-  }
-});
 
 // ===== GET - Obtener predicciones del usuario para una sala =====
 router.get('/player/predictions/:roomId', async (req, res) => {
@@ -441,5 +341,4 @@ router.get('/player/my-predictions', async (req, res) => {
   }
 });
 
-//get
 module.exports = router;
