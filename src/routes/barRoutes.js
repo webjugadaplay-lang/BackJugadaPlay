@@ -271,9 +271,8 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
     
     const fixture = room.fixture_id ? await Fixture.findByPk(room.fixture_id) : null;
 
-    const participants = await RoomParticipant.findAll({
+    const participants = await Prediction.findAll({
       where: { room_id: roomId },
-      order: [['total_points', 'DESC']]
     });
 
     // Obtener nombres de usuarios
@@ -326,7 +325,5 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
     });
   }
 });
-
-//get
 
 module.exports = router;
