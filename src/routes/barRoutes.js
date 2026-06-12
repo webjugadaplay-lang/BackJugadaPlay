@@ -268,29 +268,29 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
     }
 
     console.log("yo soy de barRoutes");
-    
+
     const fixture = room.fixture_id ? await Fixture.findByPk(room.fixture_id) : null;
 
     const participants = await Prediction.findAll({
       where: { room_id: roomId },
     });
 
-    // Obtener nombres de usuarios
+    // Obtener nombres de usuarios y sus predicciones
     const participantsWithUsers = await Promise.all(participants.map(async (p) => {
-      const user = await User.findByPk(p.user_id);
+      const user = await User.findByK(p.user_id);
       console.log("los participantes son:", user);
       return {
         id: p.id,
         user_id: p.user_id,
         user_name: user ? user.name : 'Usuario',
         user_nickname: user ? user.nickname : 'Sin nickname',
+        goals_home: p.goals_home,
+        goals_away: p.goals_away,
         total_points: p.total_points,
         rank: p.rank,
         joined_at: p.joined_at
       };
     }));
-
-    
 
     res.json({
       success: true,
