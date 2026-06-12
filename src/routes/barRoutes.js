@@ -275,9 +275,6 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
       where: { room_id: roomId },
     });
 
-    console.log("los participantes son:", participants);
-    
-
     // Obtener nombres de usuarios
     const participantsWithUsers = await Promise.all(participants.map(async (p) => {
       const user = await User.findByPk(p.user_id);
@@ -291,6 +288,8 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
         joined_at: p.joined_at
       };
     }));
+
+    console.log("los participantes son:", participantsWithUsers);
 
     res.json({
       success: true,
