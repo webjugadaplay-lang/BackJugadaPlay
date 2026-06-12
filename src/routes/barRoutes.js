@@ -283,7 +283,7 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
         id: p.id,
         user_id: p.user_id,
         user_name: user ? user.name : 'Usuario',
-        user_nickname: p.user_nickname,
+        user_nickname: user ? user.nickname : 'Sin nickname',
         total_points: p.total_points,
         rank: p.rank,
         joined_at: p.joined_at
