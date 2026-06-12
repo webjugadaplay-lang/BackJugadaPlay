@@ -267,6 +267,8 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
       });
     }
 
+    console.log("yo soy de barRoutes");
+    
     const fixture = room.fixture_id ? await Fixture.findByPk(room.fixture_id) : null;
 
     const participants = await RoomParticipant.findAll({
