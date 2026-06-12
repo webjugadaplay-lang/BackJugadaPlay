@@ -78,6 +78,8 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
       });
     }
 
+    console.log("yo soy de apiRoutes");
+
     // 🔥 NUEVO: Obtener participantes de la sala
     const participants = await Prediction.findAll({
       where: { room_id: roomId },
