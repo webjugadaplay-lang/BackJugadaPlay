@@ -7,6 +7,7 @@ const sequelize = require('../config/database');
 const Room = require('../models/Room');
 const Prediction = require('../models/Prediction');
 const Fixture = require('../models/Fixture');
+const RoomParticipant = require('../models/RoomParticipant');
 const User = require('../models/User');
 
 // ================= PUBLIC =================
@@ -240,13 +241,11 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
 router.get('/player/live-room/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
-    
+
     console.log('📝 Buscando sala:', roomId);
 
     const room = await Room.findByPk(roomId);
-    
     if (!room) {
-      console.log('❌ Sala no encontrada:', roomId);
       return res.status(404).json({
         success: false,
         message: 'Sala no encontrada'
@@ -256,9 +255,7 @@ router.get('/player/live-room/:roomId', async (req, res) => {
     console.log('✅ Sala encontrada:', room.id);
 
     const fixture = room.fixture_id ? await Fixture.findByPk(room.fixture_id) : null;
-    
     if (!fixture) {
-      console.log('❌ Fixture no encontrado para sala:', roomId);
       return res.status(404).json({
         success: false,
         message: 'Partido no encontrado para esta sala'
@@ -267,87 +264,115 @@ router.get('/player/live-room/:roomId', async (req, res) => {
 
     console.log('✅ Fixture encontrado:', fixture.id);
 
-    const participants = await RoomParticipant.findAll({
+    // 🔥 CAMBIO IMPORTANTE: Usar Prediction en lugar de RoomParticipant
+    const predictions = await Prediction.findAll({
       where: { room_id: roomId },
       order: [['total_points', 'DESC']]
     });
 
-    console.log(`📊 Encontrados ${participants.length} participantes`);
+    console.log(`📊 Encontradas ${predictions.length} predicciones/participantes`);
 
-    // Aquí está probablemente el error - al obtener los usuarios
-    const participantsWithUsers = await Promise.all(participants.map(async (p) => {
+    // Obtener información de los usuarios y formatear ranking
+    const rankingWithUsers = await Promise.all(predictions.map(async (prediction, index) => {
+      const user = await User.findByPk(prediction.user_id);
+      
+      // Calcular estado basado en puntos (ajusta según tus reglas)
+      let status = 'Regular';
+      const totalPoints = prediction.total_points || 0;
+      if (totalPoints >= 80) status = 'Excelente';
+      else if (totalPoints >= 60) status = 'Bien';
+      else if (totalPoints >= 40) status = 'Regular';
+      else status = 'Mal';
+
+      return {
+        userId: prediction.user_id,
+        name: user ? user.name : 'Usuario',
+        prediction: `${prediction.goals_home} x ${prediction.goals_away}`,
+        position: index + 1,
+        isUser: false, // Se marcará después
+        emoji: getRandomEmoji(),
+        status: status,
+        points: prediction.total_points
+      };
+    }));
+
+    // Obtener usuario autenticado
+    const token = req.headers.authorization?.split(' ')[1];
+    let currentUserId = null;
+    if (token) {
       try {
-        const user = await User.findByPk(p.user_id);
-        return {
-          id: p.id,
-          user_id: p.user_id,
-          user_name: user ? user.name : 'Usuario',
-          total_points: p.total_points || 0,
-          rank: p.rank || 0,
-          joined_at: p.joined_at
-        };
-      } catch (err) {
-        console.error(`Error procesando usuario ${p.user_id}:`, err.message);
-        return {
-          id: p.id,
-          user_id: p.user_id,
-          user_name: 'Error al cargar',
-          total_points: 0,
-          rank: 0,
-          joined_at: p.joined_at
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        currentUserId = decoded.id;
+      } catch (error) {
+        console.error('Error verificando token:', error);
+      }
+    }
+
+    // Marcar al usuario actual
+    const rankingWithUserFlag = rankingWithUsers.map(r => ({
+      ...r,
+      isUser: r.userId === currentUserId
+    }));
+
+    // Obtener predicción del usuario actual
+    let userPrediction = null;
+    if (currentUserId) {
+      const userPred = await Prediction.findOne({
+        where: {
+          room_id: roomId,
+          user_id: currentUserId
+        }
+      });
+      if (userPred) {
+        userPrediction = {
+          score_home: userPred.goals_home,
+          score_away: userPred.goals_away
         };
       }
-    }));
+    }
+
+    // Calcular pozo actual (70% del total recaudado como está en tu hook)
+    const totalPool = room.total_pool || 0;
 
     res.json({
       success: true,
       data: {
-        room: {
-          id: room.id,
-          code: room.code,
-          name: room.name,
-          entry_fee: room.entry_fee,
-          total_pool: room.total_pool,
-          total_collected: room.total_collected,
-          bar_commission: room.bar_commission,
-          platform_commission: room.platform_commission,
-          status: room.status,
-          prediction_close_time: room.prediction_close_time,
-          current_participants: room.current_participants,
-          max_participants: room.max_participants
-        },
-        fixture: fixture ? {
-          id: fixture.id,
-          home_team: fixture.home_team_name,
-          away_team: fixture.away_team_name,
-          match_date: fixture.match_date,
-          venue: fixture.venue,
-          status: fixture.status,
-          home_score: fixture.home_score || 0,
-          away_score: fixture.away_score || 0
+        id: room.id,
+        team_home: fixture.home_team_name,
+        team_away: fixture.away_team_name,
+        match_date: fixture.match_date,
+        status: fixture.status || 'En vivo',
+        total_pool: totalPool,
+        current_score_home: fixture.home_score || 0,
+        current_score_away: fixture.away_score || 0,
+        entry_fee: room.entry_fee || 0,
+        bar: room.bar_id ? {
+          id: room.bar_id,
+          name: room.bar_name
         } : null,
-        participants: participantsWithUsers
+        userPrediction: userPrediction,
+        ranking: rankingWithUserFlag
       }
     });
 
   } catch (error) {
-    // 🔥 Log COMPLETO del error
-    console.error('❌ ERROR DETALLADO en /player/live-room/:roomId:');
+    console.error('❌ ERROR DETALLADO:');
     console.error('Mensaje:', error.message);
     console.error('Stack:', error.stack);
-    console.error('Error completo:', error);
     
-    // Enviar más detalles al cliente (solo en desarrollo)
     res.status(500).json({
       success: false,
       message: 'Error al cargar los detalles de la sala',
-      error: process.env.NODE_ENV === 'development' ? {
-        message: error.message,
-        stack: error.stack
-      } : undefined
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
+
+// Función auxiliar para emojis aleatorios
+function getRandomEmoji() {
+  const emojis = ['⚽', '🏀', '🎯', '⭐', '🔥', '💪', '🎮', '🏆', '🎲', '⚡'];
+  return emojis[Math.floor(Math.random() * emojis.length)];
+}
 
 // ===== GET - Obtener TODAS las predicciones del usuario =====
 router.get('/player/my-predictions', async (req, res) => {
