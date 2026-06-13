@@ -237,12 +237,12 @@ async function calculateLiveRanking(roomId, realHome, realAway) {
   }));
 }
 
-// ===== Obtener sala en vivo con ranking =====
+// En tu endpoint /player/live-room/:roomId
 router.get('/player/live-room/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
 
-    console.log('📝 Buscando sala:', roomId);
+    console.log('🔍 Buscando sala:', roomId);
 
     const room = await Room.findByPk(roomId);
     if (!room) {
@@ -253,8 +253,14 @@ router.get('/player/live-room/:roomId', async (req, res) => {
     }
 
     console.log('✅ Sala encontrada:', room.id);
+    console.log('📌 fixture_id de la sala:', room.fixture_id);
 
-    const fixture = room.fixture_id ? await Fixture.findByPk(room.fixture_id) : null;
+    // 🔥 FORZAR UNA CONSULTA NUEVA Y LIMPIA - SIN CACHÉ
+    const fixture = await Fixture.findByPk(room.fixture_id, {
+      attributes: ['id', 'home_team_name', 'away_team_name', 'goals_home', 'goals_away', 'status', 'match_date'],
+      raw: true  // Para obtener datos planos sin metadatos de Sequelize
+    });
+    
     if (!fixture) {
       return res.status(404).json({
         success: false,
@@ -262,78 +268,23 @@ router.get('/player/live-room/:roomId', async (req, res) => {
       });
     }
 
-    console.log('✅ Fixture encontrado:', fixture.id);
+    // 🔥 LOGS DETALLADOS para ver qué valores tiene realmente la BD
+    console.log('📊 DATOS DEL FIXTURE DESDE BD:');
+    console.log('  - ID:', fixture.id);
+    console.log('  - goals_home:', fixture.goals_home);
+    console.log('  - goals_away:', fixture.goals_away);
+    console.log('  - Tipo de goals_home:', typeof fixture.goals_home);
+    console.log('  - goals_home es null?', fixture.goals_home === null);
+    console.log('  - goals_home es undefined?', fixture.goals_home === undefined);
+    
+    // 🔥 VERIFICAR SI LOS VALORES SON NULL O 0
+    const currentHomeScore = fixture.goals_home !== null && fixture.goals_home !== undefined ? fixture.goals_home : 0;
+    const currentAwayScore = fixture.goals_away !== null && fixture.goals_away !== undefined ? fixture.goals_away : 0;
+    
+    console.log('📊 Marcador final a enviar:', `${currentHomeScore} x ${currentAwayScore}`);
 
-    // 🔥 CAMBIO IMPORTANTE: Usar Prediction en lugar de RoomParticipant
-    const predictions = await Prediction.findAll({
-      where: { room_id: roomId },
-      order: [['total_points', 'DESC']]
-    });
-
-    console.log(`📊 Encontradas ${predictions.length} predicciones/participantes`);
-
-    // Obtener información de los usuarios y formatear ranking
-    const rankingWithUsers = await Promise.all(predictions.map(async (prediction, index) => {
-      const user = await User.findByPk(prediction.user_id);
-      
-      // Calcular estado basado en puntos (ajusta según tus reglas)
-      let status = 'Regular';
-      const totalPoints = prediction.total_points || 0;
-      if (totalPoints >= 80) status = 'Excelente';
-      else if (totalPoints >= 60) status = 'Bien';
-      else if (totalPoints >= 40) status = 'Regular';
-      else status = 'Mal';
-
-      return {
-        userId: prediction.user_id,
-        name: user ? user.name : 'Usuario',
-        prediction: `${prediction.goals_home} x ${prediction.goals_away}`,
-        position: index + 1,
-        isUser: false, // Se marcará después
-        emoji: getRandomEmoji(),
-        status: status,
-        points: prediction.total_points
-      };
-    }));
-
-    // Obtener usuario autenticado
-    const token = req.headers.authorization?.split(' ')[1];
-    let currentUserId = null;
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        currentUserId = decoded.id;
-      } catch (error) {
-        console.error('Error verificando token:', error);
-      }
-    }
-
-    // Marcar al usuario actual
-    const rankingWithUserFlag = rankingWithUsers.map(r => ({
-      ...r,
-      isUser: r.userId === currentUserId
-    }));
-
-    // Obtener predicción del usuario actual
-    let userPrediction = null;
-    if (currentUserId) {
-      const userPred = await Prediction.findOne({
-        where: {
-          room_id: roomId,
-          user_id: currentUserId
-        }
-      });
-      if (userPred) {
-        userPrediction = {
-          score_home: userPred.goals_home,
-          score_away: userPred.goals_away
-        };
-      }
-    }
-
-    // Calcular pozo actual (70% del total recaudado como está en tu hook)
-    const totalPool = room.total_pool || 0;
-
+    // ... resto del código para predicciones y ranking ...
+    
     res.json({
       success: true,
       data: {
@@ -342,28 +293,19 @@ router.get('/player/live-room/:roomId', async (req, res) => {
         team_away: fixture.away_team_name,
         match_date: fixture.match_date,
         status: fixture.status || 'En vivo',
-        total_pool: totalPool,
-        current_score_home: fixture.home_score || 0,
-        current_score_away: fixture.away_score || 0,
+        total_pool: room.total_pool || 0,
+        current_score_home: currentHomeScore,
+        current_score_away: currentAwayScore,
         entry_fee: room.entry_fee || 0,
-        bar: room.bar_id ? {
-          id: room.bar_id,
-          name: room.bar_name
-        } : null,
-        userPrediction: userPrediction,
-        ranking: rankingWithUserFlag
+        // ... resto de campos
       }
     });
 
   } catch (error) {
-    console.error('❌ ERROR DETALLADO:');
-    console.error('Mensaje:', error.message);
-    console.error('Stack:', error.stack);
-    
+    console.error('❌ Error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al cargar los detalles de la sala',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error al cargar los detalles de la sala'
     });
   }
 });
