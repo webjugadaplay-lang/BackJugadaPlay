@@ -61,8 +61,6 @@ router.get('/rooms/find-by-code', authMiddleware, async (req, res) => {
 // ================= PRIVATE =================
 router.use(authMiddleware);
 
-
-
 // ===== GET - Obtener predicciones del usuario para una sala =====
 router.get('/player/predictions/:roomId', async (req, res) => {
   try {
