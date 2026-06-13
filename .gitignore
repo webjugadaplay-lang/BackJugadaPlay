@@ -42,3 +42,4 @@ coverage/
 
 # Configuración local
 *.local
+public/fixtureslive.json
