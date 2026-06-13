@@ -257,10 +257,10 @@ router.get('/player/live-room/:roomId', async (req, res) => {
 
     // 🔥 FORZAR UNA CONSULTA NUEVA Y LIMPIA - SIN CACHÉ
     const fixture = await Fixture.findByPk(room.fixture_id, {
-      attributes: ['id', 'home_team_name', 'away_team_name', 'goals_home', 'goals_away', 'status', 'match_date'],
+      attributes: ['id', 'home_team_name', 'home_team_logo', 'away_team_name', 'away_team_logo', 'goals_home', 'goals_away', 'status', 'match_date'],
       raw: true  // Para obtener datos planos sin metadatos de Sequelize
     });
-    
+
     if (!fixture) {
       return res.status(404).json({
         success: false,
@@ -276,21 +276,23 @@ router.get('/player/live-room/:roomId', async (req, res) => {
     console.log('  - Tipo de goals_home:', typeof fixture.goals_home);
     console.log('  - goals_home es null?', fixture.goals_home === null);
     console.log('  - goals_home es undefined?', fixture.goals_home === undefined);
-    
+
     // 🔥 VERIFICAR SI LOS VALORES SON NULL O 0
     const currentHomeScore = fixture.goals_home !== null && fixture.goals_home !== undefined ? fixture.goals_home : 0;
     const currentAwayScore = fixture.goals_away !== null && fixture.goals_away !== undefined ? fixture.goals_away : 0;
-    
+
     console.log('📊 Marcador final a enviar:', `${currentHomeScore} x ${currentAwayScore}`);
 
     // ... resto del código para predicciones y ranking ...
-    
+
     res.json({
       success: true,
       data: {
         id: room.id,
         team_home: fixture.home_team_name,
+        home_team_logo: fixture.home_team_logo,
         team_away: fixture.away_team_name,
+        away_team_logo: fixture.away_team_logo,
         match_date: fixture.match_date,
         status: fixture.status || 'En vivo',
         total_pool: room.total_pool || 0,
