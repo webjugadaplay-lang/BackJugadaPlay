@@ -313,6 +313,8 @@ router.get('/rooms/:roomId', authMiddleware, async (req, res) => {
           id: fixture.id,
           home_team: fixture.home_team_name,
           away_team: fixture.away_team_name,
+          home_team_logo: fixture.home_team_logo,
+          away_team_logo: fixture.away_team_logo,
           match_date: fixture.match_date,
           venue: fixture.venue,
           status: fixture.status
