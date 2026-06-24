@@ -15,7 +15,7 @@ const UserLeague = require('./models/UserLeague');
 const Room = require('./models/Room');
 const Prediction = require('./models/Prediction');
 
-// ✅ IMPORTAR TODAS LAS ASOCIACIONES DE LOS MODELOS
+// ✅ IMPORTAR TODAS LAS ASOCIACIONES DE LOS MODELOS (SOLO UNA VEZ)
 const models = { User, PasswordResetToken, Fixture, UserLeague, Room, Prediction };
 
 // Ejecutar las asociaciones de cada modelo
@@ -35,24 +35,6 @@ const leagueRoutes = require('./routes/league');
 const barRoutes = require('./routes/barRoutes');
 const apiRoutes = require('./routes/apiRoutes');
 const playerRoutes = require('./routes/playerRoutes');
-
-// ✅ CARGAR TODAS LAS ASOCIACIONES DE LOS MODELOS
-// Definir todas las asociaciones aquí para que estén disponibles globalmente
-const models = {
-  User,
-  PasswordResetToken,
-  Fixture,
-  UserLeague,
-  Room,
-  Prediction
-};
-
-// Ejecutar las asociaciones de cada modelo
-Object.values(models).forEach(model => {
-  if (model.associate) {
-    model.associate(models);
-  }
-});
 
 const app = express();
 const PORT = process.env.PORT || 10000;
