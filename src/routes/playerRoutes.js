@@ -9,5 +9,6 @@ router.use(authMiddleware);
 
 // Ruta para obtener resultado de un partido
 router.get('/match-result/:roomId', getMatchResult);
+router.get('/live-room/:roomId', getLiveRoomData);
 
 module.exports = router;

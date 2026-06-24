@@ -62,20 +62,20 @@ const Prediction = sequelize.define('Prediction', {
       try {
         const Room = require('./Room');
         const amountPaid = parseFloat(prediction.entry_fee_paid);
-        
+
         // Obtener la sala actual
         const room = await Room.findByPk(prediction.room_id, {
           transaction: options.transaction
         });
-        
+
         if (!room) {
           throw new Error(`Sala ${prediction.room_id} no encontrada`);
         }
-        
+
         // Calcular nuevo total recaudado
         const currentCollected = parseFloat(room.total_collected || 0);
         const newTotalCollected = currentCollected + amountPaid;
-        
+
         // Actualizar la sala con todos los campos calculados
         await Room.update({
           total_collected: newTotalCollected,
@@ -87,34 +87,34 @@ const Prediction = sequelize.define('Prediction', {
           where: { id: prediction.room_id },
           transaction: options.transaction
         });
-        
+
         console.log(`✅ Sala ${prediction.room_id} actualizada:`);
         console.log(`   - Recaudado total: R$ ${newTotalCollected.toFixed(2)}`);
         console.log(`   - Pozo ganador (70%): R$ ${(newTotalCollected * 0.7).toFixed(2)}`);
         console.log(`   - Comisión bar (20%): R$ ${(newTotalCollected * 0.2).toFixed(2)}`);
         console.log(`   - Comisión plataforma (10%): R$ ${(newTotalCollected * 0.1).toFixed(2)}`);
         console.log(`   - Participantes: +1`);
-        
+
       } catch (error) {
         console.error('❌ Error actualizando sala:', error);
         throw error;
       }
     },
-    
+
     // Si se elimina una predicción, restar del total
     afterDestroy: async (prediction, options) => {
       try {
         const Room = require('./Room');
         const amountPaid = parseFloat(prediction.entry_fee_paid);
-        
+
         const room = await Room.findByPk(prediction.room_id, {
           transaction: options.transaction
         });
-        
+
         if (room) {
           const currentCollected = parseFloat(room.total_collected || 0);
           const newTotalCollected = Math.max(0, currentCollected - amountPaid);
-          
+
           await Room.update({
             total_collected: newTotalCollected,
             total_pool: newTotalCollected * 0.7,
@@ -125,7 +125,7 @@ const Prediction = sequelize.define('Prediction', {
             where: { id: prediction.room_id },
             transaction: options.transaction
           });
-          
+
           console.log(`✅ Revertida actualización sala ${prediction.room_id}: -R$ ${amountPaid.toFixed(2)}`);
         }
       } catch (error) {
@@ -135,5 +135,18 @@ const Prediction = sequelize.define('Prediction', {
     }
   }
 });
+
+// ✅ ASOCIACIONES DEFINIDAS AQUÍ
+Prediction.associate = (models) => {
+  Prediction.belongsTo(models.Room, {
+    foreignKey: 'room_id',
+    as: 'room'
+  });
+
+  Prediction.belongsTo(models.User, {
+    foreignKey: 'user_id',
+    as: 'user' // 👈 Esto permite usar 'user' en el include
+  });
+};
 
 module.exports = Prediction;

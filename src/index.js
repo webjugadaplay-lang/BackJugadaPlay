@@ -15,18 +15,18 @@ const UserLeague = require('./models/UserLeague');
 const Room = require('./models/Room');
 const Prediction = require('./models/Prediction');
 
-// Importar servicio de actualización de fixtures (SIN WebSocket)
+// ✅ IMPORTAR TODAS LAS ASOCIACIONES DE LOS MODELOS
+const models = { User, PasswordResetToken, Fixture, UserLeague, Room, Prediction };
+
+// Ejecutar las asociaciones de cada modelo
+Object.values(models).forEach(model => {
+  if (model.associate) {
+    model.associate(models);
+  }
+});
+
+// Importar servicio de actualización de fixtures
 const FixtureUpdateService = require('./services/fixtureUpdateService');
-
-// ========== ASOCIACIONES (TODAS AQUÍ) ==========
-Prediction.belongsTo(Room, { foreignKey: 'room_id', as: 'room' });
-Room.hasMany(Prediction, { foreignKey: 'room_id', as: 'predictions' });
-
-User.hasMany(Prediction, { foreignKey: 'user_id', as: 'predictions' });
-Prediction.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
-
-Room.belongsTo(Fixture, { foreignKey: 'fixture_id', as: 'Fixture' });
-Fixture.hasMany(Room, { foreignKey: 'fixture_id', as: 'rooms' });
 
 // Importar rutas
 const authRoutes = require('./routes/authRoutes');
@@ -35,6 +35,24 @@ const leagueRoutes = require('./routes/league');
 const barRoutes = require('./routes/barRoutes');
 const apiRoutes = require('./routes/apiRoutes');
 const playerRoutes = require('./routes/playerRoutes');
+
+// ✅ CARGAR TODAS LAS ASOCIACIONES DE LOS MODELOS
+// Definir todas las asociaciones aquí para que estén disponibles globalmente
+const models = {
+  User,
+  PasswordResetToken,
+  Fixture,
+  UserLeague,
+  Room,
+  Prediction
+};
+
+// Ejecutar las asociaciones de cada modelo
+Object.values(models).forEach(model => {
+  if (model.associate) {
+    model.associate(models);
+  }
+});
 
 const app = express();
 const PORT = process.env.PORT || 10000;

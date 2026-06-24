@@ -64,14 +64,21 @@ const User = sequelize.define('User', {
   tableName: 'users',
 });
 
-// Relación: User tiene muchos Bars
+// ✅ ACTUALIZAR: Relaciones
 User.associate = (models) => {
   User.hasMany(models.Bar, {
     foreignKey: 'ownerId',
     as: 'bars',
   });
+  
+  // ✅ AGREGAR: Relación con Prediction
+  User.hasMany(models.Prediction, {
+    foreignKey: 'user_id',
+    as: 'predictions' // Esto permite usar 'user' en el include
+  });
 };
 
+// Hooks y métodos (sin cambios)
 User.beforeCreate(async (user) => {
   if (user.password) {
     const salt = await bcrypt.genSalt(10);
