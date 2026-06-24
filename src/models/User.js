@@ -54,31 +54,33 @@ const User = sequelize.define('User', {
     allowNull: false,
   },
   documentNumber: {
-  type: DataTypes.STRING(20),
-  field: 'document_number',
-  allowNull: false,
-  unique: false,
-},
+    type: DataTypes.STRING(20),
+    field: 'document_number',
+    allowNull: false,
+    unique: false,
+  },
 }, {
   timestamps: true,
   tableName: 'users',
 });
 
-// ✅ ACTUALIZAR: Relaciones
+// ✅ RELACIONES CORREGIDAS
 User.associate = (models) => {
-  User.hasMany(models.Bar, {
-    foreignKey: 'ownerId',
-    as: 'bars',
-  });
+  if (models.Bar) {
+    User.hasMany(models.Bar, {
+      foreignKey: 'ownerId',
+      as: 'bars',
+    });
+  }
   
-  // ✅ AGREGAR: Relación con Prediction
-  User.hasMany(models.Prediction, {
-    foreignKey: 'user_id',
-    as: 'predictions' // Esto permite usar 'user' en el include
-  });
+  if (models.Prediction) {
+    User.hasMany(models.Prediction, {
+      foreignKey: 'user_id',
+      as: 'predictions'
+    });
+  }
 };
 
-// Hooks y métodos (sin cambios)
 User.beforeCreate(async (user) => {
   if (user.password) {
     const salt = await bcrypt.genSalt(10);

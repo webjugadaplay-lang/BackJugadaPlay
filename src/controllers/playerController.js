@@ -46,7 +46,7 @@ const getLiveRoomData = async (req, res) => {
       where: { room_id: roomId },
       include: [{
         model: User,
-        as: 'user', // 👈 Usar 'user' que definimos en Prediction.associate
+        as: 'user',
         attributes: ['id', 'name', 'nickname']
       }],
       order: [['created_at', 'ASC']]
@@ -59,14 +59,12 @@ const getLiveRoomData = async (req, res) => {
     const currentAway = room.Fixture?.goals_away || 0;
     const matchStatus = room.Fixture?.status || 'scheduled';
 
-    // Función para calcular proximidad
     const calculateProximity = (predHome, predAway) => {
       const diffHome = Math.abs(predHome - currentHome);
       const diffAway = Math.abs(predAway - currentAway);
       return diffHome + diffAway;
     };
 
-    // Crear ranking
     const ranking = allPredictions.map(pred => {
       const proximityScore = calculateProximity(pred.goals_home, pred.goals_away);
       
@@ -89,7 +87,6 @@ const getLiveRoomData = async (req, res) => {
         }
       }
 
-      // Asegurar que pred.user existe
       const userData = pred.user || {};
       
       return {
@@ -106,7 +103,6 @@ const getLiveRoomData = async (req, res) => {
       };
     });
 
-    // Ordenar y asignar posiciones
     ranking.sort((a, b) => a.proximityScore - b.proximityScore);
     const rankedPlayers = ranking.map((player, index) => ({
       ...player,
@@ -153,7 +149,7 @@ const getLiveRoomData = async (req, res) => {
   }
 };
 
-// Función existente getMatchResult (sin cambios)
+// Función existente getMatchResult
 const getMatchResult = async (req, res) => {
   try {
     const { roomId } = req.params;

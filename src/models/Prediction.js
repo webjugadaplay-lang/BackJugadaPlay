@@ -1,3 +1,4 @@
+// models/Prediction.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
@@ -63,7 +64,6 @@ const Prediction = sequelize.define('Prediction', {
         const Room = require('./Room');
         const amountPaid = parseFloat(prediction.entry_fee_paid);
 
-        // Obtener la sala actual
         const room = await Room.findByPk(prediction.room_id, {
           transaction: options.transaction
         });
@@ -72,16 +72,14 @@ const Prediction = sequelize.define('Prediction', {
           throw new Error(`Sala ${prediction.room_id} no encontrada`);
         }
 
-        // Calcular nuevo total recaudado
         const currentCollected = parseFloat(room.total_collected || 0);
         const newTotalCollected = currentCollected + amountPaid;
 
-        // Actualizar la sala con todos los campos calculados
         await Room.update({
           total_collected: newTotalCollected,
-          total_pool: newTotalCollected * 0.7,        // 70% para el pozo
-          bar_commission: newTotalCollected * 0.2,    // 20% para el bar
-          platform_commission: newTotalCollected * 0.1, // 10% para la plataforma
+          total_pool: newTotalCollected * 0.7,
+          bar_commission: newTotalCollected * 0.2,
+          platform_commission: newTotalCollected * 0.1,
           current_participants: sequelize.literal('current_participants + 1')
         }, {
           where: { id: prediction.room_id },
@@ -101,7 +99,6 @@ const Prediction = sequelize.define('Prediction', {
       }
     },
 
-    // Si se elimina una predicción, restar del total
     afterDestroy: async (prediction, options) => {
       try {
         const Room = require('./Room');
@@ -136,17 +133,21 @@ const Prediction = sequelize.define('Prediction', {
   }
 });
 
-// ✅ ASOCIACIONES DEFINIDAS AQUÍ
+// ✅ ASOCIACIONES CORREGIDAS
 Prediction.associate = (models) => {
-  Prediction.belongsTo(models.Room, {
-    foreignKey: 'room_id',
-    as: 'room'
-  });
+  if (models.Room) {
+    Prediction.belongsTo(models.Room, {
+      foreignKey: 'room_id',
+      as: 'room'
+    });
+  }
 
-  Prediction.belongsTo(models.User, {
-    foreignKey: 'user_id',
-    as: 'user' // 👈 Esto permite usar 'user' en el include
-  });
+  if (models.User) {
+    Prediction.belongsTo(models.User, {
+      foreignKey: 'user_id',
+      as: 'user'
+    });
+  }
 };
 
 module.exports = Prediction;

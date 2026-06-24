@@ -14,9 +14,18 @@ const Fixture = require('./models/Fixture');
 const UserLeague = require('./models/UserLeague');
 const Room = require('./models/Room');
 const Prediction = require('./models/Prediction');
+const Bar = require('./models/Bar');
 
-// ✅ IMPORTAR TODAS LAS ASOCIACIONES DE LOS MODELOS (SOLO UNA VEZ)
-const models = { User, PasswordResetToken, Fixture, UserLeague, Room, Prediction };
+// ✅ TODOS LOS MODELOS EN UN OBJETO
+const models = { 
+  User, 
+  PasswordResetToken, 
+  Fixture, 
+  UserLeague, 
+  Room, 
+  Prediction,
+  Bar
+};
 
 // Ejecutar las asociaciones de cada modelo
 Object.values(models).forEach(model => {
@@ -145,7 +154,6 @@ const startServer = async () => {
       console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
       console.log(`🔌 WebSocket Socket.IO habilitado`);
       
-      // Iniciar servicio de actualización automática (cada 10 segundos)
       const syncInterval = process.env.SYNC_INTERVAL || 10;
       fixtureUpdateService.start(syncInterval);
     });

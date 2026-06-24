@@ -1,23 +1,20 @@
+// models/Room.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
 
-// Variables para control de frecuencia de actualización (CRÍTICO PARA RENDIMIENTO)
 let lastUpdateTime = 0;
-const UPDATE_INTERVAL = 60000; // 60 segundos - Actualiza máximo 1 vez por minuto
-let isUpdating = false; // Evita actualizaciones concurrentes
+const UPDATE_INTERVAL = 60000;
+let isUpdating = false;
 
-// Función para actualizar salas expiradas
 async function updateExpiredRooms() {
   try {
     const now = Date.now();
 
-    // Solo actualizar si pasó el tiempo mínimo
     if (now - lastUpdateTime < UPDATE_INTERVAL) {
       return 0;
     }
 
-    // Evitar actualizaciones concurrentes
     if (isUpdating) {
       return 0;
     }
@@ -26,7 +23,6 @@ async function updateExpiredRooms() {
 
     const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000);
 
-    // Actualizar todas las salas activas que cumplen la condición
     const [updatedCount] = await Room.update(
       {
         status: 'finished'
@@ -59,7 +55,6 @@ async function updateExpiredRooms() {
   }
 }
 
-// Definir el modelo
 const Room = sequelize.define('Room', {
   id: {
     type: DataTypes.UUID,
@@ -135,52 +130,51 @@ const Room = sequelize.define('Room', {
   timestamps: true,
   tableName: 'rooms',
   hooks: {
-    // Hook para actualizar campos calculados antes de guardar
     beforeUpdate: async (room, options) => {
-      // Si total_collected cambió, recalcular todos los campos derivados
       if (room.changed('total_collected')) {
         const collected = parseFloat(room.total_collected);
-        room.total_pool = collected * 0.7;           // 70% para el pozo del ganador
-        room.bar_commission = collected * 0.2;       // 20% para el bar
-        room.platform_commission = collected * 0.1;  // 10% para la plataforma
+        room.total_pool = collected * 0.7;
+        room.bar_commission = collected * 0.2;
+        room.platform_commission = collected * 0.1;
       }
     }
   }
 });
 
-// Establecer la asociación con Fixture
+// ✅ ASOCIACIONES CORREGIDAS
 Room.associate = (models) => {
-  Room.belongsTo(models.Bar, { foreignKey: 'bar_id' });
-  Room.belongsTo(models.Fixture, { foreignKey: 'fixture_id' });
-  Room.hasMany(models.Prediction, { foreignKey: 'room_id' });
-  Room.hasMany(models.RoomParticipant, { foreignKey: 'room_id' });
+  if (models.Bar) {
+    Room.belongsTo(models.Bar, { foreignKey: 'bar_id' });
+  }
+  if (models.Fixture) {
+    Room.belongsTo(models.Fixture, { foreignKey: 'fixture_id', as: 'Fixture' });
+  }
+  if (models.Prediction) {
+    Room.hasMany(models.Prediction, { foreignKey: 'room_id', as: 'predictions' });
+  }
 };
 
-// ✅ Sobrescribir los métodos de consulta para actualizar automáticamente
+// ✅ Sobrescribir los métodos de consulta
 const originalFindAll = Room.findAll.bind(Room);
 const originalFindOne = Room.findOne.bind(Room);
 const originalFindByPk = Room.findByPk.bind(Room);
 const originalFindAndCountAll = Room.findAndCountAll.bind(Room);
 
-// Sobrescribir findAll
 Room.findAll = async function (...args) {
   await updateExpiredRooms();
   return originalFindAll(...args);
 };
 
-// Sobrescribir findOne
 Room.findOne = async function (...args) {
   await updateExpiredRooms();
   return originalFindOne(...args);
 };
 
-// Sobrescribir findByPk
 Room.findByPk = async function (...args) {
   await updateExpiredRooms();
   return originalFindByPk(...args);
 };
 
-// Sobrescribir findAndCountAll
 Room.findAndCountAll = async function (...args) {
   await updateExpiredRooms();
   return originalFindAndCountAll(...args);
