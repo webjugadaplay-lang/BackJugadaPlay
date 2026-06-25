@@ -177,7 +177,7 @@ const getLiveRoomData = async (req, res) => {
 const getMatchResult = async (req, res) => {
   try {
     const { roomId } = req.params;
-    const userId = req.user.id;
+    const userId = req.User.id;
 
     const prediction = await Prediction.findOne({
       where: { room_id: roomId, user_id: userId }
@@ -208,9 +208,6 @@ const getMatchResult = async (req, res) => {
     const winners = await Prediction.findAll({
       where: {
         room_id: roomId,
-        goals_home: room.Fixture.goals_home,
-        goals_away: room.Fixture.goals_away,
-        is_paid: true
       }
     });
 
