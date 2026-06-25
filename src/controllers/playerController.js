@@ -11,9 +11,7 @@ const getLiveRoomData = async (req, res) => {
     const { roomId } = req.params;
     const userId = req.user.id;
 
-    console.log(`📡 Obteniendo datos en vivo para sala: ${roomId}`);
-
-    // 1. Verificar que el usuario participó en esta sala
+    // 1. Verificar acceso del usuario
     const userPrediction = await Prediction.findOne({
       where: { room_id: roomId, user_id: userId }
     });
@@ -25,12 +23,11 @@ const getLiveRoomData = async (req, res) => {
       });
     }
 
-    // 2. Obtener la sala con el fixture
+    // 2. Obtener sala con fixture
     const room = await Room.findByPk(roomId, {
       include: [{
         model: Fixture,
-        as: 'Fixture',
-        attributes: ['id', 'team_home', 'team_away', 'home_team_logo', 'away_team_logo', 'match_date', 'goals_home', 'goals_away', 'status']
+        as: 'Fixture'
       }]
     });
 
@@ -41,104 +38,124 @@ const getLiveRoomData = async (req, res) => {
       });
     }
 
-    // 3. Obtener TODAS las predicciones de la sala con datos de usuario
+    // 3. Obtener todas las predicciones
     const allPredictions = await Prediction.findAll({
       where: { room_id: roomId },
       include: [{
         model: User,
         as: 'user',
         attributes: ['id', 'name', 'nickname']
-      }],
-      order: [['created_at', 'ASC']]
+      }]
     });
 
-    console.log(`📊 Encontradas ${allPredictions.length} predicciones`);
-
-    // 4. Calcular el ranking
+    // 4. Datos del marcador actual
     const currentHome = room.Fixture?.goals_home || 0;
     const currentAway = room.Fixture?.goals_away || 0;
     const matchStatus = room.Fixture?.status || 'scheduled';
 
-    const calculateProximity = (predHome, predAway) => {
-      const diffHome = Math.abs(predHome - currentHome);
-      const diffAway = Math.abs(predAway - currentAway);
-      return diffHome + diffAway;
-    };
-
+    // 5. Calcular ranking basado en proximidad al marcador actual
     const ranking = allPredictions.map(pred => {
-      const proximityScore = calculateProximity(pred.goals_home, pred.goals_away);
-      
+      const diffHome = Math.abs(pred.goals_home - currentHome);
+      const diffAway = Math.abs(pred.goals_away - currentAway);
+      const proximityScore = diffHome + diffAway;
+
       let status = '';
       let emoji = '⚽';
       
-      if (matchStatus === 'live' || matchStatus === 'finished') {
-        if (proximityScore === 0) {
-          status = 'Excelente';
-          emoji = '🎯';
-        } else if (proximityScore <= 2) {
-          status = 'Bien';
-          emoji = '👍';
-        } else if (proximityScore <= 4) {
-          status = 'Regular';
-          emoji = '👀';
-        } else {
-          status = 'Lejos';
-          emoji = '😅';
-        }
+      if (proximityScore === 0) {
+        status = 'Excelente';
+        emoji = '🎯';
+      } else if (proximityScore <= 2) {
+        status = 'Bien';
+        emoji = '👍';
+      } else if (proximityScore <= 4) {
+        status = 'Regular';
+        emoji = '👀';
+      } else {
+        status = 'Lejos';
+        emoji = '😅';
       }
 
-      const userData = pred.user || {};
-      
       return {
-        userId: userData.id || pred.user_id,
-        name: userData.nickname || userData.name || 'Anónimo',
+        userId: pred.user?.id || pred.user_id,
+        name: pred.user?.nickname || pred.user?.name || 'Anónimo',
         prediction: `${pred.goals_home} x ${pred.goals_away}`,
-        scoreHome: pred.goals_home,
-        scoreAway: pred.goals_away,
-        proximityScore: proximityScore,
         isUser: pred.user_id === userId,
-        status: status,
         emoji: emoji,
-        entryFee: pred.entry_fee_paid
+        status: status,
+        proximityScore: proximityScore
       };
     });
 
+    // Ordenar por proximidad (menor = mejor)
     ranking.sort((a, b) => a.proximityScore - b.proximityScore);
-    const rankedPlayers = ranking.map((player, index) => ({
-      ...player,
-      position: index + 1
-    }));
+    
+    // Asignar posiciones
+    ranking.forEach((player, index) => {
+      player.position = index + 1;
+    });
 
-    // 5. Construir respuesta completa
-    const responseData = {
-      id: room.id,
-      team_home: room.Fixture?.team_home || 'Local',
-      home_team_logo: room.Fixture?.home_team_logo || '',
-      team_away: room.Fixture?.team_away || 'Visitante',
-      away_team_logo: room.Fixture?.away_team_logo || '',
-      match_date: room.Fixture?.match_date || new Date(),
-      status: room.status,
-      total_pool: room.total_pool || 0,
-      current_score_home: currentHome,
-      current_score_away: currentAway,
-      entry_fee: room.entry_fee || 0,
-      bar: room.bar ? {
-        id: room.bar.id,
-        name: room.bar.name || room.bar.bar_name
-      } : null,
-      userPrediction: {
-        score_home: userPrediction.goals_home,
-        score_away: userPrediction.goals_away
-      },
-      ranking: rankedPlayers,
-      matchStatus: matchStatus,
-      totalPlayers: rankedPlayers.length
+    // 6. Calcular ganadores (si el partido terminó)
+    let winnersCount = 0;
+    let totalPrize = 0;
+
+    if (room.status === 'finished') {
+      const winners = allPredictions.filter(pred => 
+        pred.goals_home === currentHome && 
+        pred.goals_away === currentAway &&
+        pred.is_paid === true
+      );
+      
+      winnersCount = winners.length;
+      totalPrize = winnersCount > 0 ? (room.total_pool * 0.7) / winnersCount : 0;
+    }
+
+    // 7. CONSTRUIR RESPUESTA ÚNICA CON TODO
+    const response = {
+      success: true,
+      match: {
+        id: room.id,
+        room_id: room.id,
+        match_date: room.Fixture?.match_date || new Date(),
+        status: room.status,
+        total_pool: room.total_pool || 0,
+        current_score_home: currentHome,
+        current_score_away: currentAway,
+        entry_fee: room.entry_fee || 0,
+        bar: room.bar ? { id: room.bar.id, name: room.bar.name } : null,
+        
+        // Datos de equipos
+        team_home: room.Fixture?.team_home || 'Local',
+        home_team_logo: room.Fixture?.home_team_logo || '',
+        team_away: room.Fixture?.team_away || 'Visitante',
+        away_team_logo: room.Fixture?.away_team_logo || '',
+        
+        // Resultado final (solo si terminó)
+        score_home: currentHome,
+        score_away: currentAway,
+        winners_count: winnersCount,
+        total_prize: Math.round(totalPrize),
+        
+        // Predicción del usuario
+        userPrediction: {
+          score_home: userPrediction.goals_home,
+          score_away: userPrediction.goals_away
+        },
+        
+        // Ranking en vivo
+        ranking: ranking,
+        totalPlayers: ranking.length,
+        matchStatus: matchStatus
+      }
     };
 
-    res.json({
-      success: true,
-      data: responseData
-    });
+    console.log('📊 Enviando datos completos:');
+    console.log(`   - Marcador: ${currentHome} x ${currentAway}`);
+    console.log(`   - Ranking: ${ranking.length} jugadores`);
+    console.log(`   - Ganadores: ${winnersCount}`);
+    console.log(`   - Premio: R$ ${totalPrize}`);
+
+    res.json(response);
 
   } catch (error) {
     console.error('❌ Error en getLiveRoomData:', error);
