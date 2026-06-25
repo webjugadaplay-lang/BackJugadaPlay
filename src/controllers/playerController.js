@@ -69,10 +69,19 @@ const getLiveRoomData = async (req, res) => {
       const diffAway = Math.abs(pred.goals_away - currentAway);
       const proximityScore = diffHome + diffAway;
 
+      // ✅ NUEVO: Verificar si la predicción AÚN ES POSIBLE
+      const isStillPossible =
+        pred.goals_home >= currentHome &&  // El local puede llegar a su predicción
+        pred.goals_away >= currentAway;    // El visitante puede llegar a su predicción
+
       let status = '';
       let emoji = '⚽';
-      
-      if (proximityScore === 0) {
+
+      if (!isStillPossible) {
+        // ❌ YA NO PUEDE ACERTAR
+        status = 'Imposible';
+        emoji = '❌';
+      } else if (proximityScore === 0) {
         status = 'Excelente';
         emoji = '🎯';
       } else if (proximityScore <= 2) {
@@ -93,13 +102,14 @@ const getLiveRoomData = async (req, res) => {
         isUser: pred.user_id === userId,
         emoji: emoji,
         status: status,
-        proximityScore: proximityScore
+        proximityScore: proximityScore,
+        isStillPossible: isStillPossible // ✅ Para saber si aún puede acertar
       };
     });
 
     // Ordenar por proximidad
     ranking.sort((a, b) => a.proximityScore - b.proximityScore);
-    
+
     // Asignar posiciones
     ranking.forEach((player, index) => {
       player.position = index + 1;
@@ -110,12 +120,12 @@ const getLiveRoomData = async (req, res) => {
     let totalPrize = 0;
 
     if (room.status === 'finished') {
-      const winners = allPredictions.filter(pred => 
-        pred.goals_home === currentHome && 
+      const winners = allPredictions.filter(pred =>
+        pred.goals_home === currentHome &&
         pred.goals_away === currentAway &&
         pred.is_paid === true
       );
-      
+
       winnersCount = winners.length;
       totalPrize = winnersCount > 0 ? (room.total_pool * 0.7) / winnersCount : 0;
     }
@@ -132,25 +142,25 @@ const getLiveRoomData = async (req, res) => {
         current_score_home: currentHome,
         current_score_away: currentAway,
         entry_fee: room.entry_fee || 0,
-        
+
         // Datos de equipos
         team_home: room.Fixture.home_team_name,
         home_team_logo: room.Fixture?.home_team_logo || '',
         team_away: room.Fixture.away_team_name,
         away_team_logo: room.Fixture?.away_team_logo || '',
-        
+
         // Resultado final
         score_home: currentHome,
         score_away: currentAway,
         winners_count: winnersCount,
         total_prize: Math.round(totalPrize),
-        
+
         // Predicción del usuario - SIEMPRE debe existir
         userPrediction: {
           score_home: userPrediction.goals_home,
           score_away: userPrediction.goals_away
         },
-        
+
         // Ranking
         ranking: ranking,
         totalPlayers: ranking.length,
