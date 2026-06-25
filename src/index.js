@@ -77,7 +77,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/league', leagueRoutes);
 app.use('/api/bar', barRoutes);
 app.use('/api', apiRoutes);
-app.use('/api/player', playerRoutes);
+app.use('/player', playerRoutes);
 
 // Ruta de prueba
 app.get('/health', (req, res) => {
