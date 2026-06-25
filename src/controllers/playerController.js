@@ -107,8 +107,14 @@ const getLiveRoomData = async (req, res) => {
       };
     });
 
-    // Ordenar por proximidad
-    ranking.sort((a, b) => a.proximityScore - b.proximityScore);
+    // Ordenar: PRIMERO los que aún son posibles, LUEGO los imposibles
+    ranking.sort((a, b) => {
+      // Los imposibles van al final
+      if (!a.isStillPossible && b.isStillPossible) return 1;
+      if (a.isStillPossible && !b.isStillPossible) return -1;
+      // Si ambos son posibles o ambos imposibles, ordenar por proximityScore
+      return a.proximityScore - b.proximityScore;
+    });
 
     // Asignar posiciones
     ranking.forEach((player, index) => {
