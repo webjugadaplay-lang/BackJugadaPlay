@@ -134,9 +134,9 @@ const getLiveRoomData = async (req, res) => {
         entry_fee: room.entry_fee || 0,
         
         // Datos de equipos
-        team_home: room.Fixture?.team_home || 'Local',
+        team_home: fixture.home_team_name,
         home_team_logo: room.Fixture?.home_team_logo || '',
-        team_away: room.Fixture?.team_away || 'Visitante',
+        team_away: fixture.away_team_name,
         away_team_logo: room.Fixture?.away_team_logo || '',
         
         // Resultado final
