@@ -83,7 +83,7 @@ const getLiveRoomData = async (req, res) => {
         emoji = '❌';
       } else if (proximityScore === 0) {
         status = 'Excelente';
-        emoji = '🎯';
+        emoji = '🥳';
       } else if (proximityScore <= 2) {
         status = 'Bien';
         emoji = '👍';
@@ -92,7 +92,7 @@ const getLiveRoomData = async (req, res) => {
         emoji = '👀';
       } else {
         status = 'Lejos';
-        emoji = '😅';
+        emoji = '🤬';
       }
 
       return {
