@@ -349,4 +349,28 @@ router.get('/player/my-predictions', async (req, res) => {
   }
 });
 
+router.get('/fixtures/update-all', async (req, res) => {
+  try {
+    const FixtureUpdateService = require('../services/fixtureUpdateService');
+    const service = new FixtureUpdateService();
+    await service.updateLiveFixtures();
+    res.json({ success: true, message: 'Actualización iniciada' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Obtener fixture con todos sus datos
+router.get('/fixtures/:id', async (req, res) => {
+  try {
+    const fixture = await Fixture.findByPk(req.params.id);
+    if (!fixture) {
+      return res.status(404).json({ error: 'Fixture no encontrado' });
+    }
+    res.json(fixture);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

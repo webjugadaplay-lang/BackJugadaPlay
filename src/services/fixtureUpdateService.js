@@ -1,169 +1,220 @@
+// services/fixtureUpdateService.js
 const axios = require('axios');
-const sequelize = require('../config/database');
+const { Op } = require('sequelize');
+const Fixture = require('../models/Fixture');
 
 class FixtureUpdateService {
-    constructor() {
-        this.lastScores = new Map(); // Almacenar últimos marcadores conocidos
-        this.isRunning = false;
+  constructor() {
+    this.updateInterval = null;
+    this.isRunning = false;
+  }
+
+  start(intervalMinutes = 10) {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
     }
 
-    // Obtener fixtures en vivo desde API-Football
-    async fetchLiveFixtures() {
-        try {
-            const response = await axios.get('https://v3.football.api-sports.io/fixtures', {
-                params: { live: 'all' },
-                headers: {
-                    'x-apisports-key': process.env.API_FOOTBALL_KEY
-                }
-            });
+    console.log(`🔄 Servicio de actualización iniciado - Intervalo: ${intervalMinutes} minutos`);
+    
+    // Ejecutar inmediatamente
+    this.updateLiveFixtures();
+    
+    // Configurar intervalo
+    this.updateInterval = setInterval(() => {
+      this.updateLiveFixtures();
+    }, intervalMinutes * 60 * 1000);
+  }
 
-            return response.data.response;
-        } catch (error) {
-            console.error('Error fetching live fixtures:', error.message);
-            return [];
-        }
+  stop() {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+      console.log('⏹️ Servicio de actualización detenido');
+    }
+  }
+
+  async updateLiveFixtures() {
+    if (this.isRunning) {
+      console.log('⚠️ Actualización en curso, omitiendo...');
+      return;
     }
 
-    // Verificar si hubo cambios en los goles
-    checkScoreChanges(fixtureId, newHomeScore, newAwayScore) {
-        const lastScore = this.lastScores.get(fixtureId);
+    this.isRunning = true;
+    console.log(`📊 [${new Date().toISOString()}] Actualizando fixtures en vivo...`);
+
+    try {
+      // Obtener partidos en vivo de la API
+      const liveResponse = await this.fetchLiveFixtures();
+      
+      if (liveResponse && liveResponse.response && liveResponse.response.length > 0) {
+        console.log(`📊 Encontrados ${liveResponse.response.length} partidos en vivo`);
         
-        if (!lastScore) {
-            // Primera vez que vemos este fixture
-            this.lastScores.set(fixtureId, { home: newHomeScore, away: newAwayScore });
-            return { hasChanges: false, isFirstTime: true };
+        for (const fixtureData of liveResponse.response) {
+          await this.updateFixture(fixtureData);
         }
+      }
 
-        const hasChanges = (lastScore.home !== newHomeScore) || (lastScore.away !== newAwayScore);
+      // También actualizar partidos programados para hoy
+      const today = new Date();
+      const startOfDay = new Date(today);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(today);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const scheduledFixtures = await Fixture.findAll({
+        where: {
+          match_date: {
+            [Op.between]: [startOfDay, endOfDay]
+          },
+          status: {
+            [Op.in]: ['NS', 'TBD', '1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE']
+          }
+        }
+      });
+
+      if (scheduledFixtures.length > 0) {
+        console.log(`📅 Actualizando ${scheduledFixtures.length} partidos programados de hoy`);
         
-        if (hasChanges) {
-            console.log(`⚽ CAMBIO DETECTADO - Fixture ${fixtureId}: ${lastScore.home}-${lastScore.away} → ${newHomeScore}-${newAwayScore}`);
-            this.lastScores.set(fixtureId, { home: newHomeScore, away: newAwayScore });
+        for (const fixture of scheduledFixtures) {
+          await this.updateScheduledFixture(fixture);
         }
+      }
 
-        return { hasChanges, isFirstTime: false };
+      console.log('✅ Actualización completada');
+    } catch (error) {
+      console.error('❌ Error en actualización de fixtures:', error.message);
+    } finally {
+      this.isRunning = false;
     }
+  }
 
-    // Actualizar la base de datos local
-    async updateDatabase(fixtureId, goalsHome, goalsAway) {
-        try {
-            // Verificar si el fixture existe en la base de datos
-            const [fixture] = await sequelize.query(
-                `SELECT id, goals_home, goals_away FROM fixtures WHERE id = :fixtureId`,
-                {
-                    replacements: { fixtureId },
-                    type: sequelize.QueryTypes.SELECT
-                }
-            );
-
-            if (!fixture) {
-                console.log(`⚠️ Fixture ${fixtureId} no encontrado en la base de datos local`);
-                return false;
-            }
-
-            // Solo actualizar si realmente hay cambios
-            if (fixture.goals_home === goalsHome && fixture.goals_away === goalsAway) {
-                console.log(`ℹ️ Fixture ${fixtureId} ya está actualizado: ${goalsHome}-${goalsAway}`);
-                return false;
-            }
-
-            // Actualizar la base de datos
-            await sequelize.query(
-                `UPDATE fixtures 
-                 SET goals_home = :goalsHome, 
-                     goals_away = :goalsAway,
-                     updated_at = NOW()
-                 WHERE id = :fixtureId`,
-                {
-                    replacements: { goalsHome, goalsAway, fixtureId },
-                    type: sequelize.QueryTypes.UPDATE
-                }
-            );
-            
-            console.log(`✅ BASE DE DATOS ACTUALIZADA - Fixture ${fixtureId}: ${goalsHome}-${goalsAway}`);
-            return true;
-        } catch (error) {
-            console.error(`Error updating database for fixture ${fixtureId}:`, error);
-            return false;
+  async fetchLiveFixtures() {
+    try {
+      const apiKey = process.env.API_FOOTBALL_KEY;
+      const baseUrl = process.env.API_FOOTBALL_URL || 'https://v3.football.api-sports.io';
+      
+      const response = await axios.get(`${baseUrl}/fixtures`, {
+        params: {
+          live: 'all'
+        },
+        headers: {
+          'x-rapidapi-key': apiKey,
+          'x-rapidapi-host': 'v3.football.api-sports.io'
         }
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching live fixtures:', error.message);
+      throw error;
     }
+  }
 
-    // Procesar un fixture individual
-    async processFixture(fixture) {
-        const fixtureId = fixture.fixture.id;
-        const newHomeScore = fixture.goals.home || 0;
-        const newAwayScore = fixture.goals.away || 0;
-
-        // Verificar cambios
-        const { hasChanges, isFirstTime } = this.checkScoreChanges(fixtureId, newHomeScore, newAwayScore);
-
-        // Solo actualizar si hay cambios reales (ignorar la primera vez)
-        if (hasChanges && !isFirstTime) {
-            await this.updateDatabase(fixtureId, newHomeScore, newAwayScore);
-            return true; // Hubo actualización
+  async fetchFixtureById(fixtureId) {
+    try {
+      const apiKey = process.env.API_FOOTBALL_KEY;
+      const baseUrl = process.env.API_FOOTBALL_URL || 'https://v3.football.api-sports.io';
+      
+      const response = await axios.get(`${baseUrl}/fixtures`, {
+        params: {
+          id: fixtureId
+        },
+        headers: {
+          'x-rapidapi-key': apiKey,
+          'x-rapidapi-host': 'v3.football.api-sports.io'
         }
-        
-        return false; // No hubo cambios
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching fixture ${fixtureId}:`, error.message);
+      return null;
     }
+  }
 
-    // Sincronización principal - Solo actualiza la base de datos
-    async sync() {
-        if (this.isRunning) {
-            console.log('⚠️ Sincronización ya en curso, omitiendo...');
-            return;
-        }
+  async updateFixture(fixtureData) {
+    try {
+      const fixture = fixtureData.fixture;
+      const league = fixtureData.league;
+      const teams = fixtureData.teams;
+      const goals = fixtureData.goals;
+      const score = fixtureData.score;
+      const events = fixtureData.events || [];
 
-        this.isRunning = true;
-        console.log('🔄 Verificando cambios en API-Football...');
+      // Preparar datos para actualizar
+      const updateData = {
+        league_id: league.id,
+        league_name: league.name,
+        league_country: league.country,
+        league_logo: league.logo,
+        season: league.season,
+        round: league.round,
+        home_team_id: teams.home.id,
+        home_team_name: teams.home.name,
+        home_team_logo: teams.home.logo,
+        home_team_winner: teams.home.winner,
+        away_team_id: teams.away.id,
+        away_team_name: teams.away.name,
+        away_team_logo: teams.away.logo,
+        away_team_winner: teams.away.winner,
+        match_date: new Date(fixture.date),
+        timestamp: fixture.timestamp,
+        status: fixture.status.short,
+        status_long: fixture.status.long,
+        elapsed: fixture.status.elapsed || 0,
+        extra_time: fixture.status.extra || null,
+        goals_home: goals.home,
+        goals_away: goals.away,
+        halftime_home: score.halftime.home,
+        halftime_away: score.halftime.away,
+        fulltime_home: score.fulltime.home,
+        fulltime_away: score.fulltime.away,
+        extratime_home: score.extratime.home,
+        extratime_away: score.extratime.away,
+        penalty_home: score.penalty.home,
+        penalty_away: score.penalty.away,
+        venue: fixture.venue.name,
+        venue_city: fixture.venue.city,
+        referee: fixture.referee,
+        events: events // Guardamos los eventos completos como JSON
+      };
 
-        try {
-            const liveFixtures = await this.fetchLiveFixtures();
-            
-            if (liveFixtures.length === 0) {
-                console.log('📭 No hay partidos en vivo actualmente');
-                this.isRunning = false;
-                return;
-            }
+      // Actualizar o crear el fixture
+      await Fixture.upsert({
+        id: fixture.id,
+        ...updateData
+      });
 
-            console.log(`📊 Revisando ${liveFixtures.length} partidos en vivo`);
-            let updatedCount = 0;
+      console.log(`✅ Partido ${teams.home.name} vs ${teams.away.name} actualizado (${fixture.status.short})`);
+      
+      // Emitir actualización por Socket.IO si está disponible
+      if (global.io) {
+        global.io.emit('fixture-update', {
+          fixtureId: fixture.id,
+          ...updateData
+        });
+      }
 
-            for (const fixture of liveFixtures) {
-                const wasUpdated = await this.processFixture(fixture);
-                if (wasUpdated) updatedCount++;
-            }
-
-            if (updatedCount > 0) {
-                console.log(`✅ Sincronización completada - ${updatedCount} fixtures actualizados`);
-            } else {
-                console.log(`✅ Sincronización completada - Sin cambios detectados`);
-            }
-        } catch (error) {
-            console.error('Error en sincronización:', error);
-        } finally {
-            this.isRunning = false;
-        }
+      return true;
+    } catch (error) {
+      console.error(`Error actualizando fixture ${fixtureData.fixture.id}:`, error.message);
+      return false;
     }
+  }
 
-    // Iniciar el servicio programado
-    start(intervalSeconds = 10) {
-        console.log(`🚀 Iniciando servicio de actualización de fixtures cada ${intervalSeconds} segundos`);
-        console.log(`📝 Solo actualizará la base de datos - SIN notificaciones WebSocket`);
-        
-        // Ejecutar inmediatamente
-        this.sync();
-        
-        // Programar ejecuciones periódicas
-        setInterval(() => {
-            this.sync();
-        }, intervalSeconds * 1000);
+  async updateScheduledFixture(fixture) {
+    try {
+      const fixtureData = await this.fetchFixtureById(fixture.id);
+      
+      if (fixtureData && fixtureData.response && fixtureData.response.length > 0) {
+        await this.updateFixture(fixtureData.response[0]);
+        console.log(`🔄 Partido programado ${fixture.home_team_name} vs ${fixture.away_team_name} actualizado`);
+      }
+    } catch (error) {
+      console.error(`Error actualizando fixture programado ${fixture.id}:`, error.message);
     }
-
-    // Detener el servicio
-    stop() {
-        console.log('🛑 Deteniendo servicio de actualización de fixtures');
-        this.isRunning = true; // Previene nuevas ejecuciones
-    }
+  }
 }
 
 module.exports = FixtureUpdateService;

@@ -17,12 +17,12 @@ const Prediction = require('./models/Prediction');
 const Bar = require('./models/Bar');
 
 // ✅ TODOS LOS MODELOS EN UN OBJETO
-const models = { 
-  User, 
-  PasswordResetToken, 
-  Fixture, 
-  UserLeague, 
-  Room, 
+const models = {
+  User,
+  PasswordResetToken,
+  Fixture,
+  UserLeague,
+  Room,
   Prediction,
   Bar
 };
@@ -59,6 +59,9 @@ const io = socketIO(server, {
     credentials: true
   }
 });
+
+// 🔥 Guardar io globalmente para usar en servicios
+global.io = io;
 
 // Middlewares
 app.use(cors());
@@ -103,7 +106,7 @@ io.use(async (socket, next) => {
     if (!token) {
       return next(new Error('Authentication error'));
     }
-    
+
     const jwt = require('jsonwebtoken');
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     socket.userId = decoded.id;
@@ -153,7 +156,7 @@ const startServer = async () => {
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
       console.log(`🔌 WebSocket Socket.IO habilitado`);
-      
+
       const syncInterval = process.env.SYNC_INTERVAL || 10;
       fixtureUpdateService.start(syncInterval);
     });
