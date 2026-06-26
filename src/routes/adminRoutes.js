@@ -32,5 +32,6 @@ router.get("/live-fixtures", adminController.getLiveFixtures);
 router.get("/available-leagues", adminController.getAvailableLeagues);
 router.post("/add-leagues", adminController.addLeagues);
 router.get("/user-leagues", adminController.getUserLeagues);
+router.delete("/leagues/:leagueId", adminController.deleteLeague);
 
 module.exports = router;

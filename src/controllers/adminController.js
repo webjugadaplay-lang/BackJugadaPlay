@@ -693,3 +693,68 @@ exports.getUserLeagues = async (req, res) => {
     });
   }
 };
+
+// ============ ELIMINAR LIGA ============
+exports.deleteLeague = async (req, res) => {
+  try {
+    const { leagueId } = req.params;
+
+    // Verificar que el leagueId sea válido
+    if (!leagueId || isNaN(parseInt(leagueId))) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de liga inválido'
+      });
+    }
+
+    // Buscar la liga en UserLeague
+    const userLeague = await UserLeague.findOne({
+      where: { league_id: leagueId }
+    });
+
+    if (!userLeague) {
+      return res.status(404).json({
+        success: false,
+        message: 'Liga no encontrada'
+      });
+    }
+
+    // Guardar información para el log (opcional)
+    const leagueInfo = {
+      league_id: userLeague.league_id,
+      league_name: userLeague.league_name,
+      league_country: userLeague.league_country
+    };
+
+    //Eliminar permanentemente (hard delete)
+    await userLeague.destroy();
+
+    console.log(`🗑️ Liga eliminada: ${leagueInfo.league_name} (${leagueInfo.league_country}) - ID: ${leagueInfo.league_id}`);
+
+    // Eliminar también los partidos asociados a esta liga
+    const deletedFixtures = await Fixture.destroy({
+      where: { league_id: leagueId }
+    });
+
+    if (deletedFixtures > 0) {
+      console.log(`📊 ${deletedFixtures} partidos eliminados de la liga ${leagueInfo.league_name}`);
+    }
+
+    return res.json({
+      success: true,
+      message: `Liga "${userLeague.league_name}" eliminada correctamente`,
+      data: {
+        league: leagueInfo,
+        fixturesDeleted: deletedFixtures
+      }
+    });
+
+  } catch (error) {
+    console.error('Error eliminando liga:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error al eliminar la liga',
+      error: error.message
+    });
+  }
+};
