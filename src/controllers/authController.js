@@ -480,24 +480,43 @@ exports.login = async (req, res) => {
   try {
     let { email, password, role } = req.body;
 
-    // Si el email NO contiene @, asumimos que es teléfono
-    let emailToSearch = email;
-    if (email && !email.includes('@')) {
-      // Limpiar el teléfono (solo números)
-      const phoneClean = email.replace(/\D/g, '');
-      emailToSearch = `${phoneClean}@jugadaplay.com`;
-    }
-
     // Normalizar rol: si viene 'bar', buscamos 'owner' en la BD
     let dbRole = role;
     if (role === 'bar') {
       dbRole = 'owner';
     }
 
-    // Buscar usuario por email (o email generado)
-    const user = await User.findOne({
-      where: { email: emailToSearch, role: dbRole }
-    });
+    let user = null;
+
+    // ✅ Si es PLAYER, buscar por teléfono o email
+    if (dbRole === 'player') {
+      // Si el identificador son solo números (teléfono)
+      if (email && /^\d+$/.test(email)) {
+        const phoneClean = email.replace(/\D/g, '');
+        user = await User.findOne({
+          where: {
+            phone: phoneClean,
+            role: 'player'
+          }
+        });
+      } else {
+        // Si tiene @, buscar por email
+        user = await User.findOne({
+          where: {
+            email: email,
+            role: 'player'
+          }
+        });
+      }
+    } else {
+      // ✅ Para OWNER y ADMIN, buscar por email
+      user = await User.findOne({
+        where: {
+          email: email,
+          role: dbRole
+        }
+      });
+    }
 
     if (!user) {
       return res.status(401).json({
