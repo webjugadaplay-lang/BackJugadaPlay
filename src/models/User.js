@@ -51,13 +51,13 @@ const User = sequelize.define('User', {
   documentType: {
     type: DataTypes.STRING(20),
     field: 'document_type',
-    allowNull: false,
+    allowNull: true,
   },
   documentNumber: {
     type: DataTypes.STRING(20),
     field: 'document_number',
     allowNull: false,
-    unique: false,
+    unique: true,
   },
 }, {
   timestamps: true,

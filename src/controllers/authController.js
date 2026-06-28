@@ -385,36 +385,24 @@ exports.register = async (req, res) => {
 
     // ============ LÓGICA PARA PLAYER ============
     if (role === 'player') {
-      // Verificar si el jugador ya existe por email
+      // Verificar si el jugador ya existe por email o teléfono
+      const emailGenerado = `${phone}@jugadaplay.com`;
+
+      // Buscar por email generado O por teléfono
       const existingPlayer = await User.findOne({
         where: {
-          email: email,
+          [Sequelize.Op.or]: [
+            { email: emailGenerado },
+            { phone: phone.replace(/\D/g, '') }
+          ],
           role: 'player'
         }
       });
 
       if (existingPlayer) {
         return res.status(400).json({
-          message: 'Ya tienes una cuenta como jugador. Inicia sesión.'
+          message: 'Este número ya está registrado. Inicia sesión.'
         });
-      }
-
-      // Validar documento
-      if (documentNumber) {
-        const existingDocument = await User.findOne({
-          where: {
-            documentNumber: documentNumber,
-            role: 'player'
-          }
-        });
-        if (existingDocument) {
-          return res.status(400).json({ message: `${documentType} ya registrado como jugador` });
-        }
-
-        const docValidation = validateDocument(documentNumber, documentType, country);
-        if (!docValidation.isValid) {
-          return res.status(400).json({ message: docValidation.message });
-        }
       }
 
       // Validar teléfono
@@ -423,28 +411,18 @@ exports.register = async (req, res) => {
         return res.status(400).json({ message: phoneValidation.message });
       }
 
-      // Limpiar documento
-      let cleanDocument = documentNumber;
-      if (country === 'BR' && documentType === 'CPF') {
-        cleanDocument = documentNumber.replace(/\D/g, '');
-      } else if (country === 'CO' && documentType === 'Cédula') {
-        cleanDocument = documentNumber.replace(/\D/g, '');
-      } else if (country === 'MX') {
-        cleanDocument = documentNumber ? documentNumber.toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
-      }
-
       // Crear jugador
       const userData = {
-        email,
+        email: emailGenerado,
         password,
         role: 'player',
         name,
         nickname: nickname || name,
-        country: country,
-        phoneCountry: phoneCountry,
-        phone: phone ? phone.replace(/\D/g, '') : null,
-        documentType: documentType || null,
-        documentNumber: cleanDocument || null,
+        country: 'CO',
+        phoneCountry: phoneCountry || '+57',
+        phone: phone.replace(/\D/g, ''),
+        documentType: 'Teléfono',
+        documentNumber: phone.replace(/\D/g, ''),
       };
 
       const user = await User.create(userData);
@@ -459,7 +437,7 @@ exports.register = async (req, res) => {
           role: user.role,
           name: user.name,
           nickname: user.nickname,
-          country: user.country,
+          phone: user.phone,
         }
       });
     }
@@ -477,22 +455,40 @@ exports.login = async (req, res) => {
   try {
     let { email, password, role } = req.body;
 
+    // Si el email NO contiene @, asumimos que es teléfono
+    let emailToSearch = email;
+    if (email && !email.includes('@')) {
+      // Limpiar el teléfono (solo números)
+      const phoneClean = email.replace(/\D/g, '');
+      emailToSearch = `${phoneClean}@jugadaplay.com`;
+    }
+
     // Normalizar rol: si viene 'bar', buscamos 'owner' en la BD
     let dbRole = role;
     if (role === 'bar') {
       dbRole = 'owner';
     }
 
-    const user = await User.findOne({ where: { email, role: dbRole } });
+    // Buscar usuario por email (o email generado)
+    const user = await User.findOne({
+      where: { email: emailToSearch, role: dbRole }
+    });
+
     if (!user) {
-      return res.status(401).json({ message: 'Credenciales inválidas' });
+      return res.status(401).json({
+        message: role === 'player'
+          ? 'Número o email no registrado. ¿Ya tienes cuenta?'
+          : 'Credenciales inválidas'
+      });
     }
 
+    // Verificar contraseña
     const isValid = await user.validPassword(password);
     if (!isValid) {
-      return res.status(401).json({ message: 'Credenciales inválidas' });
+      return res.status(401).json({ message: 'Contraseña incorrecta' });
     }
 
+    // Obtener bares si es owner
     let bars = [];
     if (user.role === 'owner') {
       bars = await Bar.findAll({
@@ -504,7 +500,7 @@ exports.login = async (req, res) => {
 
     const token = generateToken(user);
 
-    // 🔥 IMPORTANTE: Preparar el objeto user con todos los datos
+    // Preparar respuesta
     const userResponse = {
       id: user.id,
       email: user.email,
@@ -517,7 +513,7 @@ exports.login = async (req, res) => {
       documentType: user.documentType,
     };
 
-    // 🔥 AGREGAR LOS BARES AL OBJETO USER
+    // Agregar bares si es owner
     if (bars.length > 0) {
       userResponse.bars = bars.map(bar => ({
         id: bar.id,
@@ -537,7 +533,6 @@ exports.login = async (req, res) => {
       user: userResponse,
     };
 
-    // También mantener bars en la raíz por compatibilidad
     if (bars.length > 0) {
       responseData.bars = bars;
     }
@@ -545,7 +540,7 @@ exports.login = async (req, res) => {
     res.json(responseData);
 
   } catch (error) {
-    console.error(error);
+    console.error('Error en login:', error);
     res.status(500).json({ message: 'Error en el servidor' });
   }
 };
