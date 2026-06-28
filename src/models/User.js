@@ -48,7 +48,7 @@ const User = sequelize.define('User', {
   },
   phone: {
     type: DataTypes.STRING(20),
-    allowNull: false, // ✅ Mantener false porque es requerido
+    allowNull: false,
   },
   documentType: {
     type: DataTypes.STRING(20),
@@ -59,7 +59,7 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING(20),
     field: 'document_number',
     allowNull: true, // ✅ Cambiado a true
-    // ❌ Eliminar: unique: true
+    // ❌ ELIMINAR: unique: true
   },
 }, {
   timestamps: true,
@@ -74,7 +74,7 @@ User.associate = (models) => {
       as: 'bars',
     });
   }
-
+  
   if (models.Prediction) {
     User.hasMany(models.Prediction, {
       foreignKey: 'user_id',

@@ -217,12 +217,13 @@ exports.register = async (req, res) => {
       address
     } = req.body;
 
-    if (!country) {
-      return res.status(400).json({ message: 'El campo country es requerido (BR, CO, MX)' });
-    }
-
     // ============ LÓGICA PARA OWNER (BAR) ============
     if (role === 'owner' || role === 'bar') {
+
+      // ✅ Validar country para owner (es requerido)
+      if (!country) {
+        return res.status(400).json({ message: 'El campo country es requerido (BR, CO, MX)' });
+      }
 
       // Validar campos requeridos
       if (!barName) {
@@ -386,7 +387,7 @@ exports.register = async (req, res) => {
     // ============ LÓGICA PARA PLAYER ============
     if (role === 'player') {
       try {
-        // ✅ Validar campos requeridos
+        // ✅ Validar solo los campos requeridos
         if (!name) {
           return res.status(400).json({ message: 'El nombre es requerido' });
         }
@@ -397,10 +398,16 @@ exports.register = async (req, res) => {
           return res.status(400).json({ message: 'La contraseña es requerida' });
         }
 
-        // ✅ Verificar si el número de teléfono ya está registrado
+        // ✅ Validar que el teléfono tenga al menos 8 dígitos
+        const cleanPhone = phone.replace(/\D/g, '');
+        if (cleanPhone.length < 8) {
+          return res.status(400).json({ message: 'El teléfono debe tener al menos 8 dígitos' });
+        }
+
+        // ✅ Verificar si el número ya está registrado
         const existingPlayer = await User.findOne({
           where: {
-            phone: phone.replace(/\D/g, ''),
+            phone: cleanPhone,
             role: 'player'
           }
         });
@@ -415,16 +422,18 @@ exports.register = async (req, res) => {
         const userData = {
           name: name.trim(),
           nickname: nickname || name.trim(),
-          phone: phone.replace(/\D/g, ''),
+          phone: cleanPhone,
           password: password,
           role: 'player',
-          // ✅ Campos opcionales con null
+          // ✅ Todos los demás campos como null
           email: null,
           phoneCountry: null,
           documentType: null,
           documentNumber: null,
           country: null,
         };
+
+        console.log('📝 Creando usuario con datos:', userData);
 
         const user = await User.create(userData);
         const token = generateToken(user);
@@ -442,7 +451,15 @@ exports.register = async (req, res) => {
         });
 
       } catch (error) {
-        console.error('Error al registrar jugador:', error);
+        console.error('❌ Error al registrar jugador:', error);
+        // ✅ Manejar errores específicos de Sequelize
+        if (error.name === 'SequelizeValidationError') {
+          const messages = error.errors.map(e => e.message);
+          return res.status(400).json({
+            message: 'Error de validación',
+            errors: messages
+          });
+        }
         return res.status(500).json({
           message: 'Error al registrar jugador',
           error: error.message
