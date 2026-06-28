@@ -56,8 +56,7 @@ const User = sequelize.define('User', {
   documentNumber: {
     type: DataTypes.STRING(20),
     field: 'document_number',
-    allowNull: false,
-    unique: true,
+    allowNull: true,
   },
 }, {
   timestamps: true,
@@ -72,7 +71,7 @@ User.associate = (models) => {
       as: 'bars',
     });
   }
-  
+
   if (models.Prediction) {
     User.hasMany(models.Prediction, {
       foreignKey: 'user_id',
