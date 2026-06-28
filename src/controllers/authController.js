@@ -385,61 +385,69 @@ exports.register = async (req, res) => {
 
     // ============ LÓGICA PARA PLAYER ============
     if (role === 'player') {
-      // Verificar si el jugador ya existe por email o teléfono
-      const emailGenerado = `${phone}@jugadaplay.com`;
-
-      // Buscar por email generado O por teléfono
-      const existingPlayer = await User.findOne({
-        where: {
-          [Sequelize.Op.or]: [
-            { email: emailGenerado },
-            { phone: phone.replace(/\D/g, '') }
-          ],
-          role: 'player'
+      try {
+        // ✅ Validar campos requeridos
+        if (!name) {
+          return res.status(400).json({ message: 'El nombre es requerido' });
         }
-      });
+        if (!phone) {
+          return res.status(400).json({ message: 'El teléfono es requerido' });
+        }
+        if (!password) {
+          return res.status(400).json({ message: 'La contraseña es requerida' });
+        }
 
-      if (existingPlayer) {
-        return res.status(400).json({
-          message: 'Este número ya está registrado. Inicia sesión.'
+        // ✅ Verificar si el número de teléfono ya está registrado
+        const existingPlayer = await User.findOne({
+          where: {
+            phone: phone.replace(/\D/g, ''),
+            role: 'player'
+          }
+        });
+
+        if (existingPlayer) {
+          return res.status(400).json({
+            message: 'Este número ya está registrado. Inicia sesión.'
+          });
+        }
+
+        // ✅ Crear usuario con campos mínimos
+        const userData = {
+          name: name.trim(),
+          nickname: nickname || name.trim(),
+          phone: phone.replace(/\D/g, ''),
+          password: password,
+          role: 'player',
+          // ✅ Campos opcionales con null
+          email: null,
+          phoneCountry: null,
+          documentType: null,
+          documentNumber: null,
+          country: null,
+        };
+
+        const user = await User.create(userData);
+        const token = generateToken(user);
+
+        return res.status(201).json({
+          message: 'Jugador registrado exitosamente',
+          token,
+          user: {
+            id: user.id,
+            name: user.name,
+            nickname: user.nickname,
+            phone: user.phone,
+            role: user.role,
+          }
+        });
+
+      } catch (error) {
+        console.error('Error al registrar jugador:', error);
+        return res.status(500).json({
+          message: 'Error al registrar jugador',
+          error: error.message
         });
       }
-
-      // Validar teléfono
-      const phoneValidation = validatePhone(phone, phoneCountry);
-      if (!phoneValidation.isValid) {
-        return res.status(400).json({ message: phoneValidation.message });
-      }
-
-      // Crear jugador
-      const userData = {
-        email: emailGenerado,
-        password,
-        role: 'player',
-        name,
-        nickname: nickname || name,
-        country: 'CO',
-        phoneCountry: phoneCountry || '+57',
-        phone: phone.replace(/\D/g, ''),
-        documentType: 'Teléfono',
-        documentNumber: phone.replace(/\D/g, ''),
-      };
-
-      const user = await User.create(userData);
-      const token = generateToken(user);
-
-      return res.status(201).json({
-        message: 'Jugador registrado exitosamente',
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          name: user.name,
-          nickname: user.nickname,
-          phone: user.phone,
-        }
-      });
     }
 
     return res.status(400).json({ message: 'Rol no válido' });

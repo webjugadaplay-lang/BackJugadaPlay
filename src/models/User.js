@@ -19,9 +19,11 @@ const User = sequelize.define('User', {
   },
   email: {
     type: DataTypes.STRING,
-    allowNull: false,
-    unique: false,
-    validate: { isEmail: true },
+    allowNull: true, // ✅ Cambiado a true
+    unique: false,   // ✅ Eliminar unique
+    validate: { 
+      isEmail: true 
+    },
   },
   password: {
     type: DataTypes.STRING,
@@ -37,26 +39,27 @@ const User = sequelize.define('User', {
   },
   country: {
     type: DataTypes.ENUM('BR', 'CO', 'MX'),
-    allowNull: false,
+    allowNull: true, // ✅ Cambiado a true
   },
   phoneCountry: {
     type: DataTypes.STRING(5),
     field: 'phone_country',
-    allowNull: false,
+    allowNull: true, // ✅ Cambiado a true
   },
   phone: {
     type: DataTypes.STRING(20),
-    allowNull: false,
+    allowNull: false, // ✅ Mantener false porque es requerido
   },
   documentType: {
     type: DataTypes.STRING(20),
     field: 'document_type',
-    allowNull: true,
+    allowNull: true, // ✅ Cambiado a true
   },
   documentNumber: {
     type: DataTypes.STRING(20),
     field: 'document_number',
-    allowNull: true,
+    allowNull: true, // ✅ Cambiado a true
+    // ❌ Eliminar: unique: true
   },
 }, {
   timestamps: true,
